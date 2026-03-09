@@ -15,6 +15,8 @@ from app.services.database import (
     list_uploaded_files,
     filter_logs,
     get_dashboard_stats,
+    save_query,
+    get_query_history,
 )
 
 router = APIRouter()
@@ -142,9 +144,23 @@ async def query_rag_local(
 ):
     retrieved = semantic_search(query=q, top_k=top_k)["results"]
     report    = generate_local_security_report(query=q, evidence=retrieved)
+
+    # Pohrani upit u povijest
+    save_query(
+        query          = q,
+        top_k          = top_k,
+        report         = report,
+        evidence_count = len(retrieved),
+        queried_at     = datetime.utcnow().isoformat(),
+    )
+
     return {
         "query":    q,
         "top_k":    top_k,
         "report":   report,
         "evidence": retrieved,
     }
+
+@router.get("/history", summary="Get query history")
+async def query_history(limit: int = Query(50, description="Max number of results")):
+    return {"history": get_query_history(limit=limit)}

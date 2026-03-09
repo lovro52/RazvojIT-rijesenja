@@ -43,6 +43,18 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_log_dst_ip    ON log_records(dst_ip);
             CREATE INDEX IF NOT EXISTS idx_log_timestamp ON log_records(timestamp);
             CREATE INDEX IF NOT EXISTS idx_log_source    ON log_records(source_file);
+
+            CREATE TABLE IF NOT EXISTS query_history (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                queried_at     TEXT    NOT NULL,
+                query          TEXT    NOT NULL,
+                top_k          INTEGER NOT NULL,
+                risk_level     TEXT,
+                summary        TEXT,
+                key_indicators TEXT,
+                recommended_actions TEXT,
+                evidence_count INTEGER
+            );
         """)
 
 
@@ -186,3 +198,56 @@ def filter_logs(
         rows = conn.execute(sql, params).fetchall()
 
     return [dict(r) for r in rows]
+
+def save_query(
+    query: str,
+    top_k: int,
+    report: Dict[str, Any],
+    evidence_count: int,
+    queried_at: str,
+) -> None:
+    import json
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO query_history
+                (queried_at, query, top_k, risk_level, summary, key_indicators,
+                 recommended_actions, evidence_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                queried_at,
+                query,
+                top_k,
+                report.get("risk_level"),
+                report.get("summary"),
+                json.dumps(report.get("key_indicators", []), ensure_ascii=False),
+                json.dumps(report.get("recommended_actions", []), ensure_ascii=False),
+                evidence_count,
+            ),
+        )
+
+
+def get_query_history(limit: int = 50) -> List[Dict[str, Any]]:
+    import json
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM query_history ORDER BY queried_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["key_indicators"]      = json.loads(d["key_indicators"] or "[]")
+        d["recommended_actions"] = json.loads(d["recommended_actions"] or "[]")
+        result.append(d)
+    return result
+
+
+def get_dashboard_stats_with_history(recent_queries: int = 5) -> Dict[str, Any]:
+    """Extend dashboard stats with recent query count."""
+    stats = get_dashboard_stats()
+    with get_conn() as conn:
+        total_queries = conn.execute("SELECT COUNT(*) FROM query_history").fetchone()[0]
+    stats["total_queries"] = total_queries
+    return stats

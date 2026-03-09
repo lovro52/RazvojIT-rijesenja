@@ -7,21 +7,12 @@
           <span class="logo-text">NETLOG<span class="accent">RAG</span></span>
         </div>
         <nav class="nav">
-          <RouterLink to="/dashboard" class="nav-link">
-            <span class="nav-icon">⊞</span> Dashboard
-          </RouterLink>
-          <RouterLink to="/upload" class="nav-link">
-            <span class="nav-icon">↑</span> Upload
-          </RouterLink>
-          <RouterLink to="/files" class="nav-link">
-            <span class="nav-icon">▣</span> Files
-          </RouterLink>
-          <RouterLink to="/filter" class="nav-link">
-            <span class="nav-icon">⊟</span> Filter
-          </RouterLink>
-          <RouterLink to="/query" class="nav-link">
-            <span class="nav-icon">⌕</span> Query
-          </RouterLink>
+          <RouterLink to="/dashboard" class="nav-link"><span class="nav-icon">⊞</span> Dashboard</RouterLink>
+          <RouterLink to="/upload"    class="nav-link"><span class="nav-icon">↑</span> Upload</RouterLink>
+          <RouterLink to="/files"     class="nav-link"><span class="nav-icon">▣</span> Files</RouterLink>
+          <RouterLink to="/filter"    class="nav-link"><span class="nav-icon">⊟</span> Filter</RouterLink>
+          <RouterLink to="/query"     class="nav-link"><span class="nav-icon">⌕</span> Query</RouterLink>
+          <RouterLink to="/history"   class="nav-link"><span class="nav-icon">◷</span> History</RouterLink>
         </nav>
       </div>
     </header>
@@ -34,10 +25,8 @@
 <style scoped>
 .app { min-height: 100vh; display: flex; flex-direction: column; }
 .header {
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
-  position: sticky; top: 0; z-index: 100;
-  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border); background: var(--bg);
+  position: sticky; top: 0; z-index: 100; backdrop-filter: blur(12px);
 }
 .header-inner {
   max-width: 1100px; margin: 0 auto; padding: 0 2rem;
@@ -45,8 +34,7 @@
 }
 .logo {
   display: flex; align-items: center; gap: 0.5rem;
-  font-family: var(--font-head); font-weight: 800;
-  font-size: 1.1rem; letter-spacing: 0.08em;
+  font-family: var(--font-head); font-weight: 800; font-size: 1.1rem; letter-spacing: 0.08em;
 }
 .logo-icon { color: var(--accent); font-size: 1.3rem; }
 .accent { color: var(--accent); }
