@@ -103,6 +103,45 @@ def list_uploaded_files() -> List[Dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
+def get_dashboard_stats() -> Dict[str, Any]:
+    """Return aggregated stats for the dashboard."""
+    with get_conn() as conn:
+        total_records = conn.execute("SELECT COUNT(*) FROM log_records").fetchone()[0]
+        total_files   = conn.execute("SELECT COUNT(*) FROM uploaded_files").fetchone()[0]
+        indexed_files = conn.execute("SELECT COUNT(*) FROM uploaded_files WHERE indexed = 1").fetchone()[0]
+
+        protocol_dist = conn.execute(
+            "SELECT protocol, COUNT(*) as count FROM log_records GROUP BY protocol ORDER BY count DESC"
+        ).fetchall()
+
+        action_dist = conn.execute(
+            "SELECT action, COUNT(*) as count FROM log_records GROUP BY action ORDER BY count DESC"
+        ).fetchall()
+
+        top_src_ips = conn.execute(
+            "SELECT src_ip, COUNT(*) as count FROM log_records WHERE src_ip IS NOT NULL GROUP BY src_ip ORDER BY count DESC LIMIT 10"
+        ).fetchall()
+
+        top_dst_ports = conn.execute(
+            "SELECT dst_port, COUNT(*) as count FROM log_records WHERE dst_port IS NOT NULL GROUP BY dst_port ORDER BY count DESC LIMIT 10"
+        ).fetchall()
+
+        recent_files = conn.execute(
+            "SELECT filename, uploaded_at, rows, indexed FROM uploaded_files ORDER BY uploaded_at DESC LIMIT 5"
+        ).fetchall()
+
+    return {
+        "total_records":   total_records,
+        "total_files":     total_files,
+        "indexed_files":   indexed_files,
+        "protocol_dist":   [dict(r) for r in protocol_dist],
+        "action_dist":     [dict(r) for r in action_dist],
+        "top_src_ips":     [dict(r) for r in top_src_ips],
+        "top_dst_ports":   [dict(r) for r in top_dst_ports],
+        "recent_files":    [dict(r) for r in recent_files],
+    }
+
+
 def filter_logs(
     src_ip:     Optional[str] = None,
     dst_ip:     Optional[str] = None,

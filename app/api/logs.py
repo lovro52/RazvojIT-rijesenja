@@ -14,6 +14,7 @@ from app.services.database import (
     mark_file_indexed,
     list_uploaded_files,
     filter_logs,
+    get_dashboard_stats,
 )
 
 router = APIRouter()
@@ -91,6 +92,11 @@ async def index_uploaded_csv(filename: str):
         "filename":        filename,
         "indexed_records": count,
     }
+
+
+@router.get("/dashboard", summary="Aggregated stats for the dashboard")
+async def dashboard():
+    return get_dashboard_stats()
 
 
 @router.get("/files", summary="List all uploaded and indexed files")

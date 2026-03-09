@@ -7,6 +7,9 @@
           <span class="logo-text">NETLOG<span class="accent">RAG</span></span>
         </div>
         <nav class="nav">
+          <RouterLink to="/dashboard" class="nav-link">
+            <span class="nav-icon">⊞</span> Dashboard
+          </RouterLink>
           <RouterLink to="/upload" class="nav-link">
             <span class="nav-icon">↑</span> Upload
           </RouterLink>
