@@ -1,111 +1,207 @@
-# RAG Security Log Analyzer
+# NetlogRAG — Analiza sigurnosnih prijetnji u mrežnim logovima pomoću RAG pristupa
 
-A FastAPI application that ingests network log CSVs, indexes them with semantic embeddings (ChromaDB + sentence-transformers), and answers security questions using a local Ollama LLM.
-
----
-
-## Project structure
-
-```
-rag_security/
-├── main.py                    # FastAPI app entry point
-├── requirements.txt
-├── .env.example               # Copy to .env and edit
-├── sample_logs.csv
-└── app/
-    ├── __init__.py
-    ├── api/
-    │   ├── __init__.py
-    │   └── logs.py            # All /logs routes
-    ├── core/
-    │   ├── __init__.py
-    │   └── config.py          # Reads .env variables
-    └── services/
-        ├── __init__.py
-        ├── normalize.py       # CSV → canonical records
-        ├── vector_store.py    # ChromaDB + embeddings
-        └── llm_local.py       # Ollama RAG report generation
-```
+> Projektni rad — Sveučilište Jurja Dobrile u Puli, Fakultet informatike  
+> Diplomski studij informatike
 
 ---
 
-## Setup
+## O projektu
 
-### 1. Clone / open the folder in VS Code
+NetlogRAG je AI sustav koji koristi **Retrieval-Augmented Generation (RAG)** pristup za analizu i interpretaciju mrežnih logova. Sustav omogućuje korisnicima postavljanje upita na prirodnom jeziku poput _"Postoje li sumnjive konekcije?"_ i dobivanje strukturiranih sigurnosnih izvještaja — bez potrebe za detaljnim tehničkim znanjem.
 
-```bash
-cd rag_security
+Projekt demonstrira primjenu RAG arhitekture u području **cybersecurity analitike** kombiniranjem semantičke pretrage s lokalnim jezičnim modelom.
+
+---
+
+## Arhitektura sustava
+
+```
+CSV logovi
+    │
+    ▼
+┌─────────────────────────────────────────────────────────┐
+│                     FastAPI Backend                      │
+│                                                         │
+│  ┌──────────────┐    ┌──────────────┐    ┌───────────┐ │
+│  │  Normalizacija│───▶│   ChromaDB   │    │  SQLite   │ │
+│  │  CSV → JSON  │    │  (vektorska  │    │  (filter, │ │
+│  └──────────────┘    │   baza)      │    │  povijest)│ │
+│                      └──────┬───────┘    └───────────┘ │
+│                             │ semantička pretraga        │
+│                      ┌──────▼───────┐                   │
+│                      │  Ollama LLM  │                   │
+│                      │ llama3.1:8b  │                   │
+│                      └──────┬───────┘                   │
+│                             │ JSON izvještaj             │
+└─────────────────────────────┼───────────────────────────┘
+                              │
+                    ┌─────────▼──────────┐
+                    │   Vue.js Frontend   │
+                    │  Upload / Filter /  │
+                    │  Files / Query      │
+                    └────────────────────┘
 ```
 
-### 2. Create and activate a virtual environment
+### Tehnologije
+
+| Sloj | Tehnologija | Svrha |
+|------|------------|-------|
+| Backend | Python, FastAPI | REST API |
+| Vektorska baza | ChromaDB | Pohrana i pretraga embeddings |
+| Embeddings | sentence-transformers (all-MiniLM-L6-v2) | Semantička reprezentacija logova |
+| LLM | Ollama (llama3.1:8b) | Generiranje sigurnosnih izvještaja |
+| Relacijska baza | SQLite | Metapodaci, filtriranje, povijest |
+| Frontend | Vue 3 + Vite | Korisničko sučelje |
+
+---
+
+## Struktura projekta
+
+```
+Diplomski/
+├── main.py                        # FastAPI app, pokretanje servera
+├── requirements.txt               # Python ovisnosti
+├── .env.example                   # Primjer environment varijabli
+├── sample_logs.csv                # Testni dataset
+│
+├── app/
+│   ├── api/
+│   │   └── logs.py                # Svi API endpointi
+│   ├── core/
+│   │   └── config.py              # Konfiguracija iz .env
+│   └── services/
+│       ├── normalize.py           # CSV → kanonički format
+│       ├── vector_store.py        # ChromaDB + embeddings
+│       ├── llm_local.py           # Ollama RAG generiranje
+│       └── database.py            # SQLite operacije
+│
+├── data/                          # Generirano pri pokretanju (nije u gitu)
+│   ├── uploads/                   # Uploadani CSV fajlovi
+│   ├── chroma/                    # ChromaDB vektorska baza
+│   └── logs.db                    # SQLite baza
+│
+└── frontend/                      # Vue.js aplikacija
+    └── src/
+        ├── App.vue                # Glavni layout i navigacija
+        ├── main.js                # Router i inicijalizacija
+        ├── style.css              # Globalni stilovi
+        └── views/
+            ├── UploadView.vue     # Upload i indeksiranje CSV-a
+            ├── FilesView.vue      # Popis uploadanih fajlova
+            ├── FilterView.vue     # Filtriranje po IP, vremenu, protokolu
+            └── QueryView.vue      # RAG upit i prikaz izvještaja
+```
+
+---
+
+## API endpointi
+
+| Metoda | Endpoint | Opis |
+|--------|----------|------|
+| POST | `/logs/upload` | Upload CSV log fajla |
+| POST | `/logs/index` | Normalizacija + embedding + pohrana u ChromaDB i SQLite |
+| GET | `/logs/files` | Lista svih uploadanih fajlova |
+| GET | `/logs/filter` | Filtriranje logova po IP, vremenu, protokolu, akciji |
+| GET | `/logs/query/semantic` | Semantička pretraga po sličnosti |
+| GET | `/logs/query/rag_local` | RAG upit — Ollama generira sigurnosni izvještaj |
+| GET | `/health` | Provjera statusa servera |
+
+---
+
+## Postavljanje projekta
+
+### Preduvjeti
+
+- Python 3.11+
+- Node.js 18+
+- [Ollama](https://ollama.com) s instaliranim modelom
+
+### Backend
 
 ```bash
+# 1. Klonirati repozitorij
+git clone https://github.com/tvoje-ime/diplomski-rag.git
+cd diplomski-rag
+
+# 2. Kreirati i aktivirati virtualno okruženje
 python -m venv .venv
+.venv\Scripts\activate        # Windows
+source .venv/bin/activate     # macOS / Linux
 
-# Windows
-.venv\Scripts\activate
-
-# macOS / Linux
-source .venv/bin/activate
-```
-
-### 3. Install dependencies
-
-```bash
+# 3. Instalirati ovisnosti
 pip install -r requirements.txt
-```
 
-### 4. Configure environment
-
-```bash
+# 4. Konfigurirati environment
 cp .env.example .env
-# Edit .env if you want a different Ollama model
-```
 
-### 5. Make sure Ollama is running with your model
-
-```bash
+# 5. Pokrenuti Ollama model
 ollama pull llama3.1:8b
-ollama serve
-```
 
-### 6. Run the server
-
-```bash
+# 6. Pokrenuti server
 uvicorn main:app --reload
 ```
 
-Open **http://localhost:8000/docs** for the interactive Swagger UI.
+Backend je dostupan na **http://localhost:8000**  
+Swagger dokumentacija: **http://localhost:8000/docs**
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend je dostupan na **http://localhost:5173**
 
 ---
 
-## API workflow
+## Korištenje
 
-| Step | Method | Endpoint | Description |
-|------|--------|----------|-------------|
-| 1 | POST | `/logs/upload` | Upload a `.csv` log file |
-| 2 | POST | `/logs/index` | Embed and store logs in ChromaDB |
-| 3 | GET  | `/logs/query/semantic` | Semantic similarity search |
-| 4 | GET  | `/logs/query/rag_local` | Full RAG answer from Ollama |
+1. **Upload** — Uploadaj CSV fajl s mrežnim logovima
+2. **Index** — Klikni "Index into Vector Store" da se logovi embedaju i pohrane
+3. **Filter** — Filtriraj logove po izvornoj/odredišnoj IP adresi, vremenskom prozoru, protokolu ili akciji
+4. **Query** — Postavi pitanje na prirodnom jeziku i dobij strukturirani sigurnosni izvještaj
 
-### Quick test with the sample CSV
+### Format CSV fajla
 
-```bash
-# 1. Upload
-curl -X POST http://localhost:8000/logs/upload \
-  -F "file=@sample_logs.csv"
+Sustav prepoznaje sljedeće nazive stupaca:
 
-# 2. Index (use the filename returned above)
-curl -X POST "http://localhost:8000/logs/index?filename=<returned_filename>"
+| Polje | Prihvaćeni nazivi stupaca |
+|-------|--------------------------|
+| Timestamp | `timestamp`, `time`, `date`, `datetime` |
+| Izvorišna IP | `src_ip`, `source_ip`, `src`, `ip_src` |
+| Odredišna IP | `dst_ip`, `destination_ip`, `dst`, `ip_dst` |
+| Protokol | `protocol`, `proto` |
+| Akcija | `flag`, `action`, `event`, `label` |
 
-# 3. Ask a question
-curl "http://localhost:8000/logs/query/rag_local?q=Are+there+any+suspicious+connections"
+---
+
+## Sigurnosni izvještaj
+
+Svaki RAG upit vraća strukturirani JSON izvještaj:
+
+```json
+{
+  "risk_level": "HIGH | MEDIUM | LOW",
+  "summary": "Kratko objašnjenje situacije",
+  "key_indicators": ["Indikator 1", "Indikator 2"],
+  "recommended_actions": ["Akcija 1", "Akcija 2"],
+  "evidence_highlights": [
+    {
+      "id": "naziv_fajla.csv:3",
+      "reason": "Zašto je ovaj log bitan"
+    }
+  ]
+}
 ```
 
 ---
 
-## VS Code tips
+## Literatura
 
-- Select your `.venv` as the Python interpreter: `Ctrl+Shift+P` → *Python: Select Interpreter* → choose `.venv`
-- Install the **Python** and **Pylance** extensions for proper import resolution
-- The project root (`rag_security/`) must be your workspace root so that `app.*` imports resolve correctly
+- Lewis, P. et al. (2020). *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks*. NeurIPS.
+- Canadian Institute for Cybersecurity. [CICIDS2017 Dataset](https://www.unb.ca/cic/datasets/ids-2017.html)
+- ChromaDB Documentation. https://docs.trychroma.com
+- LlamaIndex Documentation. https://docs.llamaindex.ai
+- FastAPI Documentation. https://fastapi.tiangolo.com
