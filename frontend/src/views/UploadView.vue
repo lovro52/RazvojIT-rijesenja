@@ -74,9 +74,38 @@
           @click="indexFile"
         >
           <span v-if="indexing" class="spinner"></span>
-          {{ indexed ? '✓ Indexed' : indexing ? 'Indexing...' : 'Index into Vector Store' }}
+          {{ indexed ? '✓ Indexed' : indexing ? 'Analysing...' : 'Index into Vector Store' }}
         </button>
         <p v-if="indexed" class="index-ok">{{ indexResult.indexed_records }} records indexed successfully.</p>
+      </div>
+
+      <!-- Auto report -->
+      <div v-if="indexed && indexResult.auto_report" class="auto-report">
+        <div class="auto-report-header">
+          <span class="auto-label">⚡ Automatska analiza</span>
+          <span class="risk-badge" :class="riskClass(indexResult.auto_report.risk_level)">
+            {{ indexResult.auto_report.risk_level }}
+          </span>
+        </div>
+        <p class="auto-summary">{{ indexResult.auto_report.summary }}</p>
+        <div class="auto-grid">
+          <div>
+            <div class="auto-section-label">⚑ Ključni indikatori</div>
+            <ul>
+              <li v-for="(ind, i) in indexResult.auto_report.key_indicators" :key="i">
+                <span class="bullet">›</span> {{ ind }}
+              </li>
+            </ul>
+          </div>
+          <div>
+            <div class="auto-section-label">✓ Preporučene akcije</div>
+            <ul>
+              <li v-for="(act, i) in indexResult.auto_report.recommended_actions" :key="i">
+                <span class="bullet">›</span> {{ act }}
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -160,6 +189,13 @@ async function indexFile() {
   } finally {
     indexing.value = false
   }
+}
+
+function riskClass(level) {
+  if (level === 'HIGH')   return 'risk-high'
+  if (level === 'MEDIUM') return 'risk-medium'
+  if (level === 'LOW')    return 'risk-low'
+  return ''
 }
 </script>
 
@@ -323,4 +359,34 @@ tr:hover td { background: var(--bg-hover); }
   padding: 0.7rem 1rem;
   font-size: 0.85rem;
 }
+
+/* Auto report */
+.auto-report {
+  border-top: 1px solid var(--border);
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  background: var(--bg-hover);
+}
+.auto-report-header { display: flex; align-items: center; gap: 0.8rem; }
+.auto-label {
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.06em; color: var(--accent);
+}
+.risk-badge {
+  padding: 0.2rem 0.6rem; border-radius: 4px;
+  font-size: 0.7rem; font-weight: 800; letter-spacing: 0.08em;
+}
+.risk-high   { background: #ff4d4d22; color: var(--danger); border: 1px solid #ff4d4d44; }
+.risk-medium { background: #ffb34722; color: var(--warn);   border: 1px solid #ffb34744; }
+.risk-low    { background: #39d98a22; color: var(--ok);     border: 1px solid #39d98a44; }
+.auto-summary { font-size: 0.83rem; color: var(--text); line-height: 1.6; }
+.auto-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.auto-section-label {
+  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em;
+  color: var(--muted); margin-bottom: 0.4rem;
+}
+ul { list-style: none; display: flex; flex-direction: column; gap: 0.3rem; }
+li { display: flex; gap: 0.4rem; font-size: 0.81rem; line-height: 1.5; }
+.bullet { color: var(--accent); flex-shrink: 0; }
 </style>

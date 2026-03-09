@@ -78,7 +78,7 @@ async def normalize_uploaded_csv(filename: str):
 
 
 @router.post("/index", summary="Normalize + embed + store a CSV into ChromaDB and SQLite")
-async def index_uploaded_csv(filename: str):
+async def index_uploaded_csv(filename: str, auto_analyze: bool = True):
     df      = _load_csv(filename)
     records = normalize_dataframe(df)
 
@@ -89,10 +89,29 @@ async def index_uploaded_csv(filename: str):
     save_log_records(records, source_file=filename)
     mark_file_indexed(filename)
 
+    # Automatska analiza nakon indeksiranja
+    auto_report = None
+    if auto_analyze:
+        try:
+            query     = f"Analiziraj sigurnosne prijetnje u fajlu {filename}"
+            retrieved = semantic_search(query=query, top_k=min(10, count))["results"]
+            report    = generate_local_security_report(query=query, evidence=retrieved)
+            save_query(
+                query          = query,
+                top_k          = min(10, count),
+                report         = report,
+                evidence_count = len(retrieved),
+                queried_at     = datetime.utcnow().isoformat(),
+            )
+            auto_report = report
+        except Exception:
+            auto_report = None
+
     return {
         "message":         "indexed",
         "filename":        filename,
         "indexed_records": count,
+        "auto_report":     auto_report,
     }
 
 
