@@ -49,16 +49,22 @@ def index_records(records: List[Dict[str, Any]], source_filename: str) -> int:
     embs = embedder.encode(docs, convert_to_numpy=True).tolist()  # type: ignore[union-attr]
     ids  = [f"{source_filename}:{i}" for i in range(len(records))]
 
+    def _s(v, default=""):  # str fallback
+        return str(v) if v is not None else default
+
+    def _i(v, default=0):  # int fallback
+        return int(v) if v is not None else default
+
     metas = [
         {
-            "timestamp": r.get("timestamp"),
-            "src_ip":    r.get("src_ip"),
-            "dst_ip":    r.get("dst_ip"),
-            "src_port":  r.get("src_port"),
-            "dst_port":  r.get("dst_port"),
-            "protocol":  r.get("protocol"),
-            "action":    r.get("action"),
-            "bytes":     r.get("bytes"),
+            "timestamp": _s(r.get("timestamp")),
+            "src_ip":    _s(r.get("src_ip")),
+            "dst_ip":    _s(r.get("dst_ip")),
+            "src_port":  _i(r.get("src_port")),
+            "dst_port":  _i(r.get("dst_port")),
+            "protocol":  _s(r.get("protocol")),
+            "action":    _s(r.get("action")),
+            "bytes":     _i(r.get("bytes")),
             "source":    source_filename,
         }
         for r in records

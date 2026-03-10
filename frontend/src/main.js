@@ -7,6 +7,8 @@ import QueryView from './views/QueryView.vue'
 import FilesView from './views/FilesView.vue'
 import FilterView from './views/FilterView.vue'
 import HistoryView from './views/HistoryView.vue'
+import IPStatsView from './views/IPStatsView.vue'
+import CompareView from './views/CompareView.vue'
 import './style.css'
 
 const router = createRouter({
@@ -17,6 +19,8 @@ const router = createRouter({
     { path: '/upload',    component: UploadView },
     { path: '/files',     component: FilesView },
     { path: '/filter',    component: FilterView },
+    { path: '/ips',       component: IPStatsView },
+    { path: '/compare',   component: CompareView },
     { path: '/query',     component: QueryView },
     { path: '/history',   component: HistoryView },
   ]

@@ -251,3 +251,110 @@ def get_dashboard_stats_with_history(recent_queries: int = 5) -> Dict[str, Any]:
         total_queries = conn.execute("SELECT COUNT(*) FROM query_history").fetchone()[0]
     stats["total_queries"] = total_queries
     return stats
+
+
+def get_ip_stats(ip: str) -> Dict[str, Any]:
+    """Return detailed statistics for a specific IP address."""
+    with get_conn() as conn:
+        # Total appearances as source
+        as_src = conn.execute(
+            "SELECT COUNT(*) FROM log_records WHERE src_ip = ?", (ip,)
+        ).fetchone()[0]
+
+        # Total appearances as destination
+        as_dst = conn.execute(
+            "SELECT COUNT(*) FROM log_records WHERE dst_ip = ?", (ip,)
+        ).fetchone()[0]
+
+        # Actions breakdown when this IP is the source
+        actions = conn.execute(
+            """SELECT action, COUNT(*) as count FROM log_records
+               WHERE src_ip = ? GROUP BY action ORDER BY count DESC""",
+            (ip,)
+        ).fetchall()
+
+        # Target ports this IP connected to
+        dst_ports = conn.execute(
+            """SELECT dst_port, COUNT(*) as count FROM log_records
+               WHERE src_ip = ? AND dst_port IS NOT NULL
+               GROUP BY dst_port ORDER BY count DESC LIMIT 10""",
+            (ip,)
+        ).fetchall()
+
+        # Source ports used
+        src_ports = conn.execute(
+            """SELECT src_port, COUNT(*) as count FROM log_records
+               WHERE src_ip = ? AND src_port IS NOT NULL
+               GROUP BY src_port ORDER BY count DESC LIMIT 10""",
+            (ip,)
+        ).fetchall()
+
+        # IPs this IP talked to
+        contacted_ips = conn.execute(
+            """SELECT dst_ip, COUNT(*) as count FROM log_records
+               WHERE src_ip = ? AND dst_ip IS NOT NULL
+               GROUP BY dst_ip ORDER BY count DESC LIMIT 10""",
+            (ip,)
+        ).fetchall()
+
+        # All log records involving this IP
+        records = conn.execute(
+            """SELECT * FROM log_records
+               WHERE src_ip = ? OR dst_ip = ?
+               ORDER BY timestamp DESC LIMIT 100""",
+            (ip, ip)
+        ).fetchall()
+
+        # Total bytes sent
+        total_bytes = conn.execute(
+            "SELECT SUM(bytes) FROM log_records WHERE src_ip = ?", (ip,)
+        ).fetchone()[0]
+
+    return {
+        "ip":            ip,
+        "as_source":     as_src,
+        "as_destination": as_dst,
+        "total_bytes":   total_bytes or 0,
+        "actions":       [dict(r) for r in actions],
+        "dst_ports":     [dict(r) for r in dst_ports],
+        "src_ports":     [dict(r) for r in src_ports],
+        "contacted_ips": [dict(r) for r in contacted_ips],
+        "records":       [dict(r) for r in records],
+    }
+
+
+def list_all_ips() -> List[Dict[str, Any]]:
+    """Return all unique IPs with their appearance count."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT src_ip as ip, COUNT(*) as count
+               FROM log_records WHERE src_ip IS NOT NULL
+               GROUP BY src_ip
+               ORDER BY count DESC"""
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def keyword_search(query: str, limit: int = 10) -> List[Dict[str, Any]]:
+    """Simple keyword search across log messages and IP fields."""
+    terms = query.strip().split()
+    if not terms:
+        return []
+
+    clauses = []
+    params  = []
+    for term in terms:
+        clauses.append(
+            "(message LIKE ? OR src_ip LIKE ? OR dst_ip LIKE ? OR action LIKE ? OR protocol LIKE ?)"
+        )
+        like = f"%{term}%"
+        params.extend([like, like, like, like, like])
+
+    where = " AND ".join(clauses)
+    sql   = f"SELECT * FROM log_records WHERE {where} ORDER BY timestamp DESC LIMIT ?"
+    params.append(limit)
+
+    with get_conn() as conn:
+        rows = conn.execute(sql, params).fetchall()
+
+    return [dict(r) for r in rows]

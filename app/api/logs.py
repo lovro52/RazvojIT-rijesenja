@@ -17,6 +17,9 @@ from app.services.database import (
     get_dashboard_stats,
     save_query,
     get_query_history,
+    get_ip_stats,
+    list_all_ips,
+    keyword_search,
 )
 
 router = APIRouter()
@@ -183,3 +186,45 @@ async def query_rag_local(
 @router.get("/history", summary="Get query history")
 async def query_history(limit: int = Query(50, description="Max number of results")):
     return {"history": get_query_history(limit=limit)}
+
+
+@router.get("/ips", summary="List all unique source IP addresses")
+async def list_ips():
+    return {"ips": list_all_ips()}
+
+
+@router.get("/ips/{ip}", summary="Detailed statistics for a specific IP address")
+async def ip_stats(ip: str):
+    return get_ip_stats(ip)
+
+
+@router.get("/compare", summary="Compare keyword search vs semantic search")
+async def compare_search(
+    q:     str = Query(..., description="Search query"),
+    top_k: int = Query(5,   description="Number of results"),
+):
+    import time
+
+    # Keyword search
+    t0      = time.perf_counter()
+    keyword = keyword_search(query=q, limit=top_k)
+    t_kw    = round((time.perf_counter() - t0) * 1000, 2)
+
+    # Semantic search
+    t0       = time.perf_counter()
+    semantic = semantic_search(query=q, top_k=top_k)["results"]
+    t_sem    = round((time.perf_counter() - t0) * 1000, 2)
+
+    return {
+        "query": q,
+        "keyword": {
+            "results":     keyword,
+            "count":       len(keyword),
+            "time_ms":     t_kw,
+        },
+        "semantic": {
+            "results":     semantic,
+            "count":       len(semantic),
+            "time_ms":     t_sem,
+        },
+    }
