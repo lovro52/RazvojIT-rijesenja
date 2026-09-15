@@ -138,13 +138,17 @@ def train(arguments: argparse.Namespace) -> dict[str, Any]:
         logging_steps=10,
         eval_strategy="epoch",
         save_strategy="epoch",
-        save_total_limit=2,
+        save_total_limit=1,
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
         seed=arguments.seed,
         data_seed=arguments.seed,
         report_to="none",
+        push_to_hub=bool(arguments.hub_model_id),
+        hub_model_id=arguments.hub_model_id,
+        hub_private_repo=arguments.hub_private_repo,
+        hub_strategy="checkpoint",
     )
     trainer = SFTTrainer(
         model=model,
@@ -154,7 +158,12 @@ def train(arguments: argparse.Namespace) -> dict[str, Any]:
         peft_config=lora,
         processing_class=tokenizer,
     )
-    result = trainer.train(resume_from_checkpoint=arguments.resume)
+    resume_checkpoint = (
+        str(arguments.resume_from_checkpoint)
+        if arguments.resume_from_checkpoint is not None
+        else arguments.resume
+    )
+    result = trainer.train(resume_from_checkpoint=resume_checkpoint)
     adapter_dir = output_dir / "adapter"
     trainer.model.save_pretrained(adapter_dir)
     tokenizer.save_pretrained(adapter_dir)
@@ -166,6 +175,7 @@ def train(arguments: argparse.Namespace) -> dict[str, Any]:
         "model_key": arguments.model,
         "model_id": model_id,
         "license": model_spec["license"],
+        "hub_model_id": arguments.hub_model_id,
         "quantization_during_training": "QLoRA NF4 4-bit double quantization",
         "seed": arguments.seed,
         "hyperparameters": {
@@ -192,6 +202,8 @@ def train(arguments: argparse.Namespace) -> dict[str, Any]:
     (output_dir / "training_report.json").write_text(
         json.dumps(manifest, indent=2), encoding="utf-8"
     )
+    if arguments.hub_model_id:
+        trainer.push_to_hub(commit_message="Complete NetlogRAG QLoRA training")
     return manifest
 
 
@@ -206,6 +218,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-dir", type=Path, default=Path("data/experiments"))
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
     parser.add_argument("--hf-token", default=None)
+    parser.add_argument("--hub-model-id")
+    parser.add_argument("--hub-private-repo", action="store_true")
     parser.add_argument("--epochs", type=float, default=2.0)
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=8)
@@ -216,6 +230,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--resume-from-checkpoint", type=Path)
     return parser.parse_args()
 
 
