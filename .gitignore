@@ -22,3 +22,9 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+data/
+models/
+*.gguf
+*.csv
+!sample_logs.csv

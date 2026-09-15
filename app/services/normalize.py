@@ -56,24 +56,51 @@ def normalize_dataframe(df: pd.DataFrame, max_rows: int = 5000) -> List[Dict[str
             # Generic
             "bytes", "len", "size", "tot_bytes",
         ])
+        # TCP flag / event — opisuje promet, NE otkriva vrstu napada
         action = _get_first(row, [
-            # CICIDS2017 attack label
-            "Label",
-            # Generic
-            "flag", "action", "event", "label",
+            "flag", "action", "event",
         ])
 
-        protocol = str(int(float(protocol))) if protocol is not None else "UNKNOWN"
-        action   = str(action).strip()       if action   is not None else "UNKNOWN"
+        # Istinita oznaka napada (ground truth). Koristi se ISKLJUČIVO za
+        # evaluaciju i prikaz — NIKAD ne ulazi u `message` koji model vidi,
+        # inače bi model samo prepisao odgovor umjesto da ga zaključi.
+        ground_truth = _get_first(row, ["Label", "label"])
+        ground_truth = str(ground_truth).strip() if ground_truth is not None else None
 
-        # Map CICIDS2017 numeric protocol to name
+        action = str(action).strip() if action is not None else "UNKNOWN"
+
+        # Protokol može biti broj (CICIDS2017: 6, 17, 1) ili naziv (TCP, UDP)
         proto_map = {"6": "TCP", "17": "UDP", "1": "ICMP", "0": "HOPOPT"}
-        protocol  = proto_map.get(protocol, protocol)
+        if protocol is None:
+            protocol = "UNKNOWN"
+        else:
+            try:
+                protocol = proto_map.get(str(int(float(protocol))), str(protocol))
+            except (TypeError, ValueError):
+                protocol = str(protocol).strip().upper()
 
-        message = (
-            f"{protocol} {action} from {src_ip}:{src_port} "
-            f"to {dst_ip}:{dst_port}, bytes={bytes_}"
-        )
+        # Dodatne karakteristike toka koje model treba analizirati
+        flow_bits = []
+        for col, short in [
+            ("Flow Duration",      "duration"),
+            ("Total Fwd Packets",  "fwd_pkts"),
+            ("Total Backward Packets", "bwd_pkts"),
+            ("Flow Bytes/s",       "bytes_s"),
+            ("Flow Packets/s",     "pkts_s"),
+            ("SYN Flag Count",     "syn"),
+            ("PSH Flag Count",     "psh"),
+            ("ACK Flag Count",     "ack"),
+        ]:
+            val = _get_first(row, [col])
+            if val is None:
+                continue
+            try:
+                v = float(val)
+            except (TypeError, ValueError):
+                continue
+            if v != v or v in (float("inf"), float("-inf")):  # NaN / Inf
+                continue
+            flow_bits.append(f"{short}={v:.1f}")
 
         try:
             src_port_int = int(float(src_port)) if src_port is not None else None
@@ -90,6 +117,13 @@ def normalize_dataframe(df: pd.DataFrame, max_rows: int = 5000) -> List[Dict[str
         except (ValueError, TypeError):
             bytes_int = None
 
+        message = (
+            f"{protocol} {action} from {src_ip}:{src_port_int} "
+            f"to {dst_ip}:{dst_port_int}, bytes={bytes_int}"
+        )
+        if flow_bits:
+            message += ", " + ", ".join(flow_bits)
+
         records.append({
             "timestamp": str(ts)     if ts     is not None else None,
             "src_ip":    str(src_ip) if src_ip is not None else None,
@@ -100,6 +134,8 @@ def normalize_dataframe(df: pd.DataFrame, max_rows: int = 5000) -> List[Dict[str
             "bytes":     bytes_int,
             "action":    action,
             "message":   message,
+            # Istinita oznaka — samo za evaluaciju i prikaz, ne za model
+            "ground_truth": ground_truth,
             "tags":      ["network", "log"],
         })
 
