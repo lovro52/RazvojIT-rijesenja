@@ -36,6 +36,15 @@
         placeholder="Napiši pitanje ili odaberi jedno gore..."
         @keydown.enter="runQuery"
       />
+      <select v-model="detectionMode" class="mode-select" title="Način detekcije">
+        <option value="auto">🤖 Auto</option>
+        <option value="flow">📊 Flow (DDoS, Scan)</option>
+        <option value="text">📝 Text (SQL, XSS)</option>
+      </select>
+      <select v-model="selectedModel" class="model-select" title="Odaberi model">
+        <option value="">Zadani model</option>
+        <option v-for="m in models" :key="m.id" :value="m.id">{{ m.name }}</option>
+      </select>
       <select v-model="topK" class="topk-select">
         <option :value="3">top 3</option>
         <option :value="5">top 5</option>
@@ -45,6 +54,29 @@
         <span v-if="loading" class="spinner"></span>
         {{ loading ? 'Analyzing...' : 'Analyze' }}
       </button>
+    </div>
+
+    <!-- Inference speed bar -->
+    <div v-if="result" class="inference-bar">
+      <span class="inf-item">
+        <span class="inf-label">Model</span>
+        <span class="inf-value accent">{{ result.report.model_used ?? selectedModel ?? 'llama3.1:8b' }}</span>
+      </span>
+      <span class="inf-sep">·</span>
+      <span class="inf-item">
+        <span class="inf-label">Mod</span>
+        <span class="inf-value">{{ result.report.detection_mode === 'text' ? '📝 Text' : '📊 Flow' }}</span>
+      </span>
+      <span class="inf-sep">·</span>
+      <span class="inf-item">
+        <span class="inf-label">Inference</span>
+        <span class="inf-value" :class="speedClass">{{ result.report.inference_ms }} ms</span>
+      </span>
+      <span class="inf-sep">·</span>
+      <span class="inf-item">
+        <span class="inf-label">Dokaza</span>
+        <span class="inf-value">{{ result.evidence.length }}</span>
+      </span>
     </div>
 
     <div v-if="error" class="error-bar">⚠ {{ error }}</div>
@@ -134,15 +166,35 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { jsPDF } from 'jspdf'
 
-const query   = ref('')
-const topK    = ref(5)
-const loading = ref(false)
-const error   = ref(null)
-const result  = ref(null)
+const query          = ref('')
+const topK           = ref(5)
+const selectedModel  = ref('')
+const detectionMode  = ref('auto')
+const loading        = ref(false)
+const error          = ref(null)
+const result         = ref(null)
+const models         = ref([])
+
+const speedClass = computed(() => {
+  const ms = result.value?.report?.inference_ms
+  if (!ms) return ''
+  if (ms < 3000)  return 'speed-fast'
+  if (ms < 8000)  return 'speed-medium'
+  return 'speed-slow'
+})
+
+async function loadModels() {
+  try {
+    const { data } = await axios.get('/logs/models')
+    models.value = data.models
+  } catch (e) {
+    console.error('Could not load models', e)
+  }
+}
 
 const suggestionGroups = [
   {
@@ -195,9 +247,9 @@ async function runQuery() {
   error.value   = null
   result.value  = null
   try {
-    const { data } = await axios.get('/logs/query/rag_local', {
-      params: { q: query.value, top_k: topK.value }
-    })
+    const params = { q: query.value, top_k: topK.value, mode: detectionMode.value }
+    if (selectedModel.value) params.model = selectedModel.value
+    const { data } = await axios.get('/logs/query/rag_local_mode', { params })
     result.value = data
   } catch (e) {
     error.value = e.response?.data?.detail ?? 'Query failed.'
@@ -205,6 +257,8 @@ async function runQuery() {
     loading.value = false
   }
 }
+
+onMounted(loadModels)
 
 function exportPdf() {
   const doc    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
@@ -402,11 +456,36 @@ function exportPdf() {
 }
 .search-bar input::placeholder { color: var(--muted); }
 
+.mode-select {
+  background: var(--bg-hover); border: 1px solid var(--border);
+  color: var(--text); border-radius: 6px; padding: 0.3rem 0.5rem;
+  font-size: 0.78rem; outline: none; cursor: pointer;
+}
+.model-select {
+  background: var(--bg-hover); border: 1px solid var(--border);
+  color: var(--text); border-radius: 6px; padding: 0.3rem 0.6rem;
+  font-size: 0.8rem; outline: none; cursor: pointer; max-width: 160px;
+}
 .topk-select {
   background: var(--bg-hover); border: 1px solid var(--border);
   color: var(--muted); border-radius: 6px; padding: 0.3rem 0.5rem;
   font-size: 0.8rem; outline: none; cursor: pointer;
 }
+
+/* Inference bar */
+.inference-bar {
+  display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0.55rem 1rem; font-size: 0.78rem;
+}
+.inf-item  { display: flex; align-items: center; gap: 0.4rem; }
+.inf-label { color: var(--muted); }
+.inf-value { font-weight: 600; }
+.inf-value.accent      { color: var(--accent); }
+.inf-value.speed-fast  { color: var(--ok); }
+.inf-value.speed-medium{ color: var(--warn); }
+.inf-value.speed-slow  { color: var(--danger); }
+.inf-sep   { color: var(--border); }
 
 .btn-primary {
   display: flex; align-items: center; gap: 0.5rem;

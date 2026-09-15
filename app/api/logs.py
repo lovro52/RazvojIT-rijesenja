@@ -161,13 +161,13 @@ async def query_semantic(
 
 @router.get("/query/rag_local", summary="RAG query answered by local Ollama model")
 async def query_rag_local(
-    q:     str = Query(..., description="Security question to answer"),
-    top_k: int = Query(5,   description="Evidence records to retrieve"),
+    q:     str           = Query(...,          description="Security question to answer"),
+    top_k: int           = Query(5,            description="Evidence records to retrieve"),
+    model: Optional[str] = Query(None,         description="Ollama model ID to use"),
 ):
     retrieved = semantic_search(query=q, top_k=top_k)["results"]
-    report    = generate_local_security_report(query=q, evidence=retrieved)
+    report    = generate_local_security_report(query=q, evidence=retrieved, model=model)
 
-    # Pohrani upit u povijest
     save_query(
         query          = q,
         top_k          = top_k,
@@ -179,8 +179,52 @@ async def query_rag_local(
     return {
         "query":    q,
         "top_k":    top_k,
+        "model":    report.get("model_used"),
         "report":   report,
         "evidence": retrieved,
+    }
+
+
+@router.get("/models", summary="List available Ollama models")
+async def list_models():
+    from app.core.config import AVAILABLE_MODELS
+    return {"models": AVAILABLE_MODELS}
+
+
+@router.get("/query/compare_models", summary="Run same query through multiple models and compare")
+async def compare_models(
+    q:      str = Query(..., description="Security question"),
+    top_k:  int = Query(5,   description="Evidence records to retrieve"),
+    models: str = Query("llama3.1:8b,llama3.2:1b", description="Comma-separated model IDs"),
+):
+    retrieved   = semantic_search(query=q, top_k=top_k)["results"]
+    model_list  = [m.strip() for m in models.split(",") if m.strip()]
+    results     = []
+
+    for model_id in model_list:
+        try:
+            report = generate_local_security_report(
+                query=q, evidence=retrieved, model=model_id
+            )
+            results.append({
+                "model":        model_id,
+                "risk_level":   report.get("risk_level"),
+                "summary":      report.get("summary"),
+                "inference_ms": report.get("inference_ms"),
+                "report":       report,
+            })
+        except Exception as e:
+            results.append({
+                "model":  model_id,
+                "error":  str(e),
+                "inference_ms": None,
+            })
+
+    return {
+        "query":    q,
+        "top_k":    top_k,
+        "evidence": retrieved,
+        "results":  results,
     }
 
 @router.get("/history", summary="Get query history")
@@ -227,4 +271,91 @@ async def compare_search(
             "count":       len(semantic),
             "time_ms":     t_sem,
         },
+    }
+
+
+# ── Baseline ML endpoints ──────────────────────────────────────────────────
+from app.services.baseline import train_models, predict_record, get_baseline_status
+
+@router.get("/baseline/status", summary="Check if baseline models are trained")
+async def baseline_status():
+    return get_baseline_status()
+
+
+@router.post("/baseline/train", summary="Train Random Forest + XGBoost on a CICIDS CSV")
+async def baseline_train(
+    filename:    str = Query(..., description="Uploaded CSV filename"),
+    sample_size: int = Query(20000, description="Max rows to train on"),
+):
+    file_path = _upload_dir / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found in uploads")
+
+    result = train_models(csv_path=str(file_path), sample_size=sample_size)
+    return result
+
+
+@router.get("/baseline/predict", summary="Predict attack type for a log record")
+async def baseline_predict(
+    filename:    str = Query(..., description="Uploaded CSV filename"),
+    row_index:   int = Query(0,   description="Row index to predict"),
+):
+    file_path = _upload_dir / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found in uploads")
+
+    import pandas as pd
+    from typing import Any
+    df  = pd.read_csv(file_path)
+    df  = df.rename(columns={c: c.strip() for c in df.columns})
+
+    if row_index >= len(df):
+        raise HTTPException(status_code=400, detail="Row index out of range")
+
+    record: dict[str, Any] = {str(k): v for k, v in df.iloc[row_index].to_dict().items()}
+    result = predict_record(record)
+    result["actual_label"] = str(record.get("Label", "Unknown"))
+    return result
+
+
+@router.get("/baseline/evaluate", summary="Evaluate trained models on an uploaded CSV")
+async def baseline_evaluate(
+    filename:    str = Query(..., description="Uploaded CSV filename"),
+    sample_size: int = Query(10000, description="Max rows to evaluate on"),
+):
+    from app.services.baseline import evaluate_on_file
+    file_path = _upload_dir / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found in uploads")
+    return evaluate_on_file(csv_path=str(file_path), sample_size=sample_size)
+
+
+@router.get("/query/rag_local_mode", summary="RAG query with detection mode")
+async def query_rag_local_mode(
+    q:     str           = Query(...,  description="Security question"),
+    top_k: int           = Query(5,    description="Evidence records to retrieve"),
+    model: Optional[str] = Query(None, description="Ollama model ID"),
+    mode:  str           = Query("auto", description="Detection mode: auto|text|flow"),
+):
+    from app.services.llm_local import generate_local_security_report_mode
+    retrieved = semantic_search(query=q, top_k=top_k)["results"]
+    report    = generate_local_security_report_mode(
+        query=q, evidence=retrieved, model=model, mode=mode
+    )
+
+    save_query(
+        query          = q,
+        top_k          = top_k,
+        report         = report,
+        evidence_count = len(retrieved),
+        queried_at     = datetime.utcnow().isoformat(),
+    )
+
+    return {
+        "query":    q,
+        "top_k":    top_k,
+        "mode":     mode,
+        "model":    report.get("model_used"),
+        "report":   report,
+        "evidence": retrieved,
     }
