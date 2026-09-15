@@ -3,12 +3,13 @@
 
     <div class="page-header">
       <h1>Usporedba modela</h1>
-      <p class="subtitle">Pokreni isti upit kroz više modela i usporedi kvalitetu odgovora i brzinu.</p>
+      <p class="subtitle">Pokreni isti dohvat kroz više modela i usporedi odgovore i latenciju. Formalna kvaliteta mjeri se na označenom testnom skupu.</p>
     </div>
 
     <!-- Model selector cards -->
     <div class="model-cards">
-      <div
+      <button
+        type="button"
         v-for="m in availableModels"
         :key="m.id"
         class="model-card"
@@ -22,7 +23,7 @@
         <div class="model-name">{{ m.name }}</div>
         <div class="model-size">{{ m.size }}</div>
         <div class="model-desc">{{ m.description }}</div>
-      </div>
+      </button>
     </div>
 
     <div v-if="selectedModels.length < 2" class="select-hint">
@@ -39,6 +40,12 @@
         :disabled="selectedModels.length < 2"
         @keydown.enter="runCompare"
       />
+      <select v-model="selectedSource" class="topk-select" title="Odaberi indeksiranu datoteku">
+        <option value="" disabled>Odaberi datoteku</option>
+        <option v-for="file in indexedFiles" :key="file.filename" :value="file.filename">
+          {{ file.filename }}
+        </option>
+      </select>
       <select v-model="topK" class="topk-select">
         <option :value="3">top 3</option>
         <option :value="5">top 5</option>
@@ -46,7 +53,7 @@
       </select>
       <button
         class="btn-primary"
-        :disabled="!query.trim() || loading || selectedModels.length < 2"
+        :disabled="!query.trim() || !selectedSource || loading || selectedModels.length < 2"
         @click="runCompare"
       >
         <span v-if="loading" class="spinner"></span>
@@ -190,9 +197,11 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import axios from 'axios'
+import api, { errorMessage } from '../services/api'
 
 const availableModels = ref([])
+const files           = ref([])
+const selectedSource  = ref('')
 const selectedModels  = ref(['llama3.1:8b'])
 const query           = ref('')
 const topK            = ref(5)
@@ -200,6 +209,7 @@ const loading         = ref(false)
 const error           = ref(null)
 const results         = ref([])
 const doneCount       = ref(0)
+const indexedFiles    = computed(() => files.value.filter(file => file.indexed))
 
 const suggestions = [
   'Je li mreža sigurna?',
@@ -218,8 +228,13 @@ const maxMs = computed(() =>
 
 async function loadModels() {
   try {
-    const { data } = await axios.get('/logs/models')
-    availableModels.value = data.models
+    const [modelsResponse, filesResponse] = await Promise.all([
+      api.get('/logs/models'),
+      api.get('/logs/files'),
+    ])
+    availableModels.value = modelsResponse.data.models
+    files.value = filesResponse.data.files
+    selectedSource.value = indexedFiles.value[0]?.filename ?? ''
   } catch (e) {
     console.error(e)
   }
@@ -235,24 +250,25 @@ function toggleModel(id) {
 }
 
 async function runCompare() {
-  if (!query.value.trim() || selectedModels.value.length < 2) return
+  if (!query.value.trim() || !selectedSource.value || selectedModels.value.length < 2) return
   loading.value  = true
   error.value    = null
   results.value  = []
   doneCount.value = 0
 
   try {
-    const { data } = await axios.get('/logs/query/compare_models', {
+    const { data } = await api.get('/logs/query/compare_models', {
       params: {
         q:      query.value,
         top_k:  topK.value,
         models: selectedModels.value.join(','),
+        source_file: selectedSource.value,
       }
     })
     results.value   = data.results
     doneCount.value = data.results.length
   } catch (e) {
-    error.value = e.response?.data?.detail ?? 'Usporedba nije uspjela.'
+    error.value = errorMessage(e, 'Usporedba nije uspjela.')
   } finally {
     loading.value = false
   }
@@ -302,6 +318,7 @@ onMounted(loadModels)
   background: var(--bg-card); border: 1px solid var(--border);
   border-radius: 12px; padding: 1rem 1.1rem; cursor: pointer;
   transition: all 0.18s; display: flex; flex-direction: column; gap: 0.3rem;
+  font: inherit; text-align: left; color: inherit;
 }
 .model-card:hover   { border-color: var(--accent); }
 .model-card.selected { border-color: var(--accent); background: var(--accent-dim); }

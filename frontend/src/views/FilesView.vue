@@ -36,7 +36,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import api from '../services/api'
 
 const files   = ref([])
 const loading = ref(false)
@@ -44,7 +44,7 @@ const loading = ref(false)
 async function loadFiles() {
   loading.value = true
   try {
-    const { data } = await axios.get('/logs/files')
+    const { data } = await api.get('/logs/files')
     files.value = data.files
   } catch (e) {
     console.error(e)

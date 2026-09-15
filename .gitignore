@@ -25,6 +25,9 @@ Thumbs.db
 
 data/
 models/
+artifacts/
+reports/*.json
+reports/*.jsonl
 *.gguf
 *.csv
-!sample_logs.csv
+!examples/sample_logs.csv

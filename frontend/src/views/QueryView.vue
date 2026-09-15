@@ -3,7 +3,7 @@
 
     <div class="page-header">
       <h1>Analiza logova</h1>
-      <p class="subtitle">Postavi pitanje o mreži — sustav pronalazi relevantne zapise i generira sigurnosnu analizu.</p>
+      <p class="subtitle">Postavi pitanje o mreži — sustav rangira agregirane incidente i generira sigurnosnu analizu.</p>
     </div>
 
     <!-- Suggested queries -->
@@ -36,23 +36,28 @@
         placeholder="Napiši pitanje ili odaberi jedno gore..."
         @keydown.enter="runQuery"
       />
+      <select v-model="selectedSource" class="model-select" title="Odaberi indeksiranu datoteku">
+        <option value="" disabled>Odaberi datoteku</option>
+        <option v-for="file in indexedFiles" :key="file.filename" :value="file.filename">
+          {{ file.filename }}
+        </option>
+      </select>
       <select v-model="detectionMode" class="mode-select" title="Način detekcije">
-        <option value="auto">🤖 Auto</option>
-        <option value="flow">📊 Flow (DDoS, Scan)</option>
-        <option value="text">📝 Text (SQL, XSS)</option>
+        <option value="auto">Automatski</option>
+        <option value="flow">Mrežni tokovi</option>
       </select>
       <select v-model="selectedModel" class="model-select" title="Odaberi model">
         <option value="">Zadani model</option>
-        <option v-for="m in models" :key="m.id" :value="m.id">{{ m.name }}</option>
+        <option v-for="m in ragModels" :key="m.id" :value="m.id">{{ m.name }}</option>
       </select>
       <select v-model="topK" class="topk-select">
         <option :value="3">top 3</option>
         <option :value="5">top 5</option>
         <option :value="10">top 10</option>
       </select>
-      <button class="btn-primary" :disabled="!query.trim() || loading" @click="runQuery">
+      <button class="btn-primary" :disabled="!query.trim() || !selectedSource || loading" @click="runQuery">
         <span v-if="loading" class="spinner"></span>
-        {{ loading ? 'Analyzing...' : 'Analyze' }}
+        {{ loading ? 'Analiziram...' : 'Analiziraj' }}
       </button>
     </div>
 
@@ -65,7 +70,7 @@
       <span class="inf-sep">·</span>
       <span class="inf-item">
         <span class="inf-label">Mod</span>
-        <span class="inf-value">{{ result.report.detection_mode === 'text' ? '📝 Text' : '📊 Flow' }}</span>
+        <span class="inf-value">Mrežni tokovi</span>
       </span>
       <span class="inf-sep">·</span>
       <span class="inf-item">
@@ -147,7 +152,7 @@
           <div v-for="(rec, i) in result.evidence" :key="i" class="log-item">
             <div class="log-top">
               <span class="log-id">{{ rec.id }}</span>
-              <span class="log-dist">dist: {{ rec.distance.toFixed(4) }}</span>
+              <span class="log-dist">rang-sličnost: {{ rec.similarity.toFixed(4) }}</span>
             </div>
             <div class="log-doc">{{ rec.document }}</div>
             <div class="log-meta">
@@ -167,7 +172,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import axios from 'axios'
+import api, { errorMessage } from '../services/api'
 import { jsPDF } from 'jspdf'
 
 const query          = ref('')
@@ -178,6 +183,10 @@ const loading        = ref(false)
 const error          = ref(null)
 const result         = ref(null)
 const models         = ref([])
+const files          = ref([])
+const selectedSource = ref('')
+const indexedFiles   = computed(() => files.value.filter(file => file.indexed))
+const ragModels      = computed(() => models.value.filter(model => model.type === 'rag'))
 
 const speedClass = computed(() => {
   const ms = result.value?.report?.inference_ms
@@ -187,12 +196,17 @@ const speedClass = computed(() => {
   return 'speed-slow'
 })
 
-async function loadModels() {
+async function loadContext() {
   try {
-    const { data } = await axios.get('/logs/models')
-    models.value = data.models
+    const [modelsResponse, filesResponse] = await Promise.all([
+      api.get('/logs/models'),
+      api.get('/logs/files'),
+    ])
+    models.value = modelsResponse.data.models
+    files.value = filesResponse.data.files
+    selectedSource.value = indexedFiles.value[0]?.filename ?? ''
   } catch (e) {
-    console.error('Could not load models', e)
+    error.value = errorMessage(e, 'Nije moguće učitati modele i datoteke.')
   }
 }
 
@@ -222,9 +236,9 @@ const suggestionGroups = [
     icon:  '🔍',
     color: 'color-danger',
     items: [
-      { text: 'Curenje podataka prema vani?',       query: 'Is there any data exfiltration or large outbound transfer?' },
-      { text: 'Neovlašteni pristup serveru?',       query: 'Is there unauthorized access to SSH or FTP server?' },
-      { text: 'Ima li malicioznih IP adresa?',      query: 'Are there connections from suspicious or malicious IP addresses?' },
+      { text: 'Veliki odlazni promet?',              query: 'Are there unusually large outbound traffic windows?' },
+      { text: 'Učestale SSH ili FTP veze?',          query: 'Are there repeated connections to SSH or FTP services?' },
+      { text: 'Najaktivnije izvorne adrese?',        query: 'Which source addresses have the most repeated connections?' },
     ],
   },
 ]
@@ -238,27 +252,33 @@ const riskClass = computed(() => {
   const r = result.value?.report?.risk_level
   if (r === 'HIGH')   return 'risk-high'
   if (r === 'MEDIUM') return 'risk-medium'
-  return 'risk-low'
+  if (r === 'LOW')    return 'risk-low'
+  return 'risk-unknown'
 })
 
 async function runQuery() {
-  if (!query.value.trim()) return
+  if (!query.value.trim() || !selectedSource.value) return
   loading.value = true
   error.value   = null
   result.value  = null
   try {
-    const params = { q: query.value, top_k: topK.value, mode: detectionMode.value }
+    const params = {
+      q: query.value,
+      top_k: topK.value,
+      mode: detectionMode.value,
+      source_file: selectedSource.value,
+    }
     if (selectedModel.value) params.model = selectedModel.value
-    const { data } = await axios.get('/logs/query/rag_local_mode', { params })
+    const { data } = await api.get('/logs/query/rag_local_mode', { params, timeout: 0 })
     result.value = data
   } catch (e) {
-    error.value = e.response?.data?.detail ?? 'Query failed.'
+    error.value = errorMessage(e, 'Analiza nije uspjela.')
   } finally {
     loading.value = false
   }
 }
 
-onMounted(loadModels)
+onMounted(loadContext)
 
 function exportPdf() {
   const doc    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
@@ -520,6 +540,7 @@ function exportPdf() {
 .risk-high   { background: #ff4d4d18; border: 1px solid #ff4d4d55; }
 .risk-medium { background: #ffb34718; border: 1px solid #ffb34755; }
 .risk-low    { background: #39d98a18; border: 1px solid #39d98a55; }
+.risk-unknown { background: #64748b18; border: 1px solid #64748b55; }
 
 .risk-left { display: flex; flex-direction: column; gap: 0.2rem; flex-shrink: 0; }
 .risk-label { font-size: 0.68rem; letter-spacing: 0.12em; color: var(--muted); }
@@ -527,6 +548,7 @@ function exportPdf() {
 .risk-high   .risk-value { color: var(--danger); }
 .risk-medium .risk-value { color: var(--warn); }
 .risk-low    .risk-value { color: var(--ok); }
+.risk-unknown .risk-value { color: var(--muted); }
 .risk-summary { color: var(--text); font-size: 0.88rem; line-height: 1.7; padding-top: 0.2rem; flex: 1; }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }

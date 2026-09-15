@@ -37,7 +37,7 @@
           <div class="stat-icon danger">⚑</div>
           <div class="stat-body">
             <div class="stat-value">{{ pshCount }}</div>
-            <div class="stat-label">PSH akcija (rizično)</div>
+            <div class="stat-label">Zapisi s PSH zastavicom</div>
           </div>
         </div>
       </div>
@@ -156,7 +156,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import axios from 'axios'
+import api from '../services/api'
 
 const stats   = ref(null)
 const loading = ref(false)
@@ -199,9 +199,9 @@ async function loadStats() {
   loading.value = true
   error.value   = null
   try {
-    const { data } = await axios.get('/logs/dashboard')
+    const { data } = await api.get('/logs/dashboard')
     stats.value = data
-  } catch (e) {
+  } catch {
     error.value = 'Greška pri učitavanju statistika.'
   } finally {
     loading.value = false

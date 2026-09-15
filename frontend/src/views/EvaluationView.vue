@@ -4,8 +4,8 @@
     <div class="page-header">
       <h1>Evaluacija</h1>
       <p class="subtitle">
-        Sistemska evaluacija baseline modela na svim CICIDS2017 datasetima.
-        Rezultati se koriste u evaluacijskom poglavlju diplomskog rada.
+        Demonstracijska evaluacija lokalno treniranih baseline modela. Za rezultate
+        diplomskog rada koristi verzionirani grouped-split pipeline iz direktorija experiments.
       </p>
     </div>
 
@@ -67,8 +67,8 @@
               </tr>
               <tr class="sub-header">
                 <th></th><th></th><th></th>
-                <th>Accuracy</th><th>F1</th>
-                <th>Accuracy</th><th>F1</th>
+                <th>Accuracy</th><th>Macro-F1</th>
+                <th>Accuracy</th><th>Macro-F1</th>
               </tr>
             </thead>
             <tbody>
@@ -95,14 +95,14 @@
                 <td :class="scoreClass(r.results?.random_forest?.accuracy)">
                   {{ pct(r.results?.random_forest?.accuracy) }}
                 </td>
-                <td :class="scoreClass(r.results?.random_forest?.f1_weighted)">
-                  {{ pct(r.results?.random_forest?.f1_weighted) }}
+                <td :class="scoreClass(r.results?.random_forest?.f1_macro)">
+                  {{ pct(r.results?.random_forest?.f1_macro) }}
                 </td>
                 <td :class="scoreClass(r.results?.xgboost?.accuracy)">
                   {{ pct(r.results?.xgboost?.accuracy) }}
                 </td>
-                <td :class="scoreClass(r.results?.xgboost?.f1_weighted)">
-                  {{ pct(r.results?.xgboost?.f1_weighted) }}
+                <td :class="scoreClass(r.results?.xgboost?.f1_macro)">
+                  {{ pct(r.results?.xgboost?.f1_macro) }}
                 </td>
               </tr>
             </tbody>
@@ -179,7 +179,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import api, { errorMessage } from '../services/api'
 
 const files        = ref([])
 const selectedFiles= ref([])
@@ -194,12 +194,14 @@ const expandedFile = ref(null)
 async function loadData() {
   try {
     const [filesRes, statusRes] = await Promise.all([
-      axios.get('/logs/files'),
-      axios.get('/logs/baseline/status'),
+      api.get('/logs/files'),
+      api.get('/logs/baseline/status'),
     ])
     files.value       = filesRes.data.files ?? []
     modelsReady.value = statusRes.data.trained
-  } catch (e) { console.error(e) }
+  } catch (e) {
+    error.value = errorMessage(e, 'Nije moguće učitati datoteke i status modela.')
+  }
 }
 
 function toggleFile(filename) {
@@ -216,7 +218,7 @@ async function runEval() {
 
   for (const filename of selectedFiles.value) {
     try {
-      const { data } = await axios.get('/logs/baseline/evaluate', {
+      const { data } = await api.get('/logs/baseline/evaluate', {
         params: { filename, sample_size: sampleSize.value }
       })
       if (data.error) {
@@ -225,7 +227,7 @@ async function runEval() {
         results.value.push(data)
       }
     } catch (e) {
-      results.value.push({ file: filename, error: e.response?.data?.detail ?? 'Greška' })
+      results.value.push({ file: filename, error: errorMessage(e, 'Evaluacija nije uspjela.') })
     }
     doneCount.value++
   }
@@ -269,9 +271,9 @@ function exportCsv() {
       shortName(r.file),
       r.n_samples ?? '',
       r.results?.random_forest?.accuracy ?? '',
-      r.results?.random_forest?.f1_weighted ?? '',
+      r.results?.random_forest?.f1_macro ?? '',
       r.results?.xgboost?.accuracy ?? '',
-      r.results?.xgboost?.f1_weighted ?? '',
+      r.results?.xgboost?.f1_macro ?? '',
       r.results?.random_forest?.inference_ms_per_sample ?? '',
       r.results?.xgboost?.inference_ms_per_sample ?? '',
     ])

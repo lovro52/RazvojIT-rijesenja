@@ -1,207 +1,141 @@
-# NetlogRAG — Analiza sigurnosnih prijetnji u mrežnim logovima pomoću RAG pristupa
+# Analysis of Security Threats in Network Logs Using Large Language Models
 
-> Projektni rad — Sveučilište Jurja Dobrile u Puli, Fakultet informatike  
-> Diplomski studij informatike
+NetlogRAG je istraživački prototip za lokalnu analizu mrežnih tokova. Projekt ima dva jasno odvojena cilja:
 
----
+1. **RAG potpora analitičaru** – dohvat agregiranih vremenskih prozora prometa i generiranje strukturiranog izvještaja uz trag korištenih dokaza.
+2. **Nadzirana klasifikacija tokova** – usporedba klasičnih ML modela s tri lokalna LLM-a prije i nakon QLoRA fine-tuninga i GGUF kvantizacije.
 
-## O projektu
+Projekt ne tvrdi da je produkcijski IDS. Semantička sličnost nije vjerojatnost napada, a LLM izvještaj mora potvrditi stručnjak. Mjerenja fine-tuniranih modela nisu unaprijed navedena: generiraju se eksperimentalnim skriptama na konkretnom hardveru i spremaju s konfiguracijom pokusa.
 
-NetlogRAG je AI sustav koji koristi **Retrieval-Augmented Generation (RAG)** pristup za analizu i interpretaciju mrežnih logova. Sustav omogućuje korisnicima postavljanje upita na prirodnom jeziku poput _"Postoje li sumnjive konekcije?"_ i dobivanje strukturiranih sigurnosnih izvještaja — bez potrebe za detaljnim tehničkim znanjem.
+## Što je promijenjeno u reviziji
 
-Projekt demonstrira primjenu RAG arhitekture u području **cybersecurity analitike** kombiniranjem semantičke pretrage s lokalnim jezičnim modelom.
+- RAG indeksira **agregirane incidente** (izvorna IP adresa + petominutni prozor), umjesto izoliranih redaka.
+- Upit se može ograničiti na jednu ulaznu datoteku; odgovor sadrži model, način detekcije, verziju prompta i ID-eve dokaza.
+- Oznaka klase (`Label`) nije dio dokumenta, embeddinga ni inference prompta.
+- Fine-tuning i inference koriste jednu verzioniranu shemu od 17 numeričkih značajki.
+- Duplikati istih značajki ostaju u istom splitu kako bi se smanjilo curenje podataka.
+- Dodani su validacija JSON izlaza, sigurniji upload, ograničenja ulaza, migracije baze, testovi i CI.
+- Klasični baseline koristi isti redoslijed značajki u treningu, evaluaciji i predikciji.
+- Eksperimentalni pipeline pokriva tri modela, base/fine-tuned evaluaciju, GGUF Q4_K_M izvoz i mjerenje Ollama inferencea.
 
----
+## Arhitektura
 
-## Arhitektura sustava
-
-```
-CSV logovi
-    │
-    ▼
-┌─────────────────────────────────────────────────────────┐
-│                     FastAPI Backend                      │
-│                                                         │
-│  ┌──────────────┐    ┌──────────────┐    ┌───────────┐ │
-│  │  Normalizacija│───▶│   ChromaDB   │    │  SQLite   │ │
-│  │  CSV → JSON  │    │  (vektorska  │    │  (filter, │ │
-│  └──────────────┘    │   baza)      │    │  povijest)│ │
-│                      └──────┬───────┘    └───────────┘ │
-│                             │ semantička pretraga        │
-│                      ┌──────▼───────┐                   │
-│                      │  Ollama LLM  │                   │
-│                      │ llama3.1:8b  │                   │
-│                      └──────┬───────┘                   │
-│                             │ JSON izvještaj             │
-└─────────────────────────────┼───────────────────────────┘
-                              │
-                    ┌─────────▼──────────┐
-                    │   Vue.js Frontend   │
-                    │  Upload / Filter /  │
-                    │  Files / Query      │
-                    └────────────────────┘
+```mermaid
+flowchart TD
+    CSV["CSV mrežni tokovi"] --> N["Normalizacija i agregacija"]
+    N --> V["ChromaDB: incidenti"]
+    N --> S["SQLite: tokovi i audit"]
+    Q["Pitanje analitičara"] --> V
+    V --> L["Lokalni Ollama LLM"]
+    L --> R["Validirani JSON izvještaj + dokazi"]
+    CSV --> C["ML/LLM klasifikacijski eksperiment"]
 ```
 
-### Tehnologije
+| Sloj | Tehnologija | Uloga |
+|---|---|---|
+| API | FastAPI | Upload, indeksiranje, pretraga, RAG, baseline i LLM klasifikacija |
+| RAG | ChromaDB + sentence-transformers | Semantičko rangiranje agregiranih incidenata |
+| Lokalni LLM | Ollama | Strukturirani sigurnosni izvještaj i kvantizirani klasifikator |
+| Podaci | SQLite | Tokovi, metapodaci i audit povijest upita |
+| Baseline | Random Forest + XGBoost | Referentna klasifikacija numeričkih tokova |
+| Sučelje | Vue 3 + Vite | Interaktivni rad s lokalnim backendom |
 
-| Sloj | Tehnologija | Svrha |
-|------|------------|-------|
-| Backend | Python, FastAPI | REST API |
-| Vektorska baza | ChromaDB | Pohrana i pretraga embeddings |
-| Embeddings | sentence-transformers (all-MiniLM-L6-v2) | Semantička reprezentacija logova |
-| LLM | Ollama (llama3.1:8b) | Generiranje sigurnosnih izvještaja |
-| Relacijska baza | SQLite | Metapodaci, filtriranje, povijest |
-| Frontend | Vue 3 + Vite | Korisničko sučelje |
+## Brzo pokretanje aplikacije
 
----
-
-## Struktura projekta
-
-```
-Diplomski/
-├── main.py                        # FastAPI app, pokretanje servera
-├── requirements.txt               # Python ovisnosti
-├── .env.example                   # Primjer environment varijabli
-├── sample_logs.csv                # Testni dataset
-│
-├── app/
-│   ├── api/
-│   │   └── logs.py                # Svi API endpointi
-│   ├── core/
-│   │   └── config.py              # Konfiguracija iz .env
-│   └── services/
-│       ├── normalize.py           # CSV → kanonički format
-│       ├── vector_store.py        # ChromaDB + embeddings
-│       ├── llm_local.py           # Ollama RAG generiranje
-│       └── database.py            # SQLite operacije
-│
-├── data/                          # Generirano pri pokretanju (nije u gitu)
-│   ├── uploads/                   # Uploadani CSV fajlovi
-│   ├── chroma/                    # ChromaDB vektorska baza
-│   └── logs.db                    # SQLite baza
-│
-└── frontend/                      # Vue.js aplikacija
-    └── src/
-        ├── App.vue                # Glavni layout i navigacija
-        ├── main.js                # Router i inicijalizacija
-        ├── style.css              # Globalni stilovi
-        └── views/
-            ├── UploadView.vue     # Upload i indeksiranje CSV-a
-            ├── FilesView.vue      # Popis uploadanih fajlova
-            ├── FilterView.vue     # Filtriranje po IP, vremenu, protokolu
-            └── QueryView.vue      # RAG upit i prikaz izvještaja
-```
-
----
-
-## API endpointi
-
-| Metoda | Endpoint | Opis |
-|--------|----------|------|
-| POST | `/logs/upload` | Upload CSV log fajla |
-| POST | `/logs/index` | Normalizacija + embedding + pohrana u ChromaDB i SQLite |
-| GET | `/logs/files` | Lista svih uploadanih fajlova |
-| GET | `/logs/filter` | Filtriranje logova po IP, vremenu, protokolu, akciji |
-| GET | `/logs/query/semantic` | Semantička pretraga po sličnosti |
-| GET | `/logs/query/rag_local` | RAG upit — Ollama generira sigurnosni izvještaj |
-| GET | `/health` | Provjera statusa servera |
-
----
-
-## Postavljanje projekta
-
-### Preduvjeti
-
-- Python 3.11+
-- Node.js 18+
-- [Ollama](https://ollama.com) s instaliranim modelom
-
-### Backend
+Preduvjeti su Python 3.11 ili 3.12, Node.js 20.19+ ili 22.12+ i [Ollama](https://ollama.com/).
 
 ```bash
-# 1. Klonirati repozitorij
-git clone https://github.com/tvoje-ime/diplomski-rag.git
-cd diplomski-rag
+git clone https://github.com/lovro52/RazvojIT-rijesenja.git
+cd RazvojIT-rijesenja
+git switch codex/thesis-revision
 
-# 2. Kreirati i aktivirati virtualno okruženje
 python -m venv .venv
-.venv\Scripts\activate        # Windows
-source .venv/bin/activate     # macOS / Linux
-
-# 3. Instalirati ovisnosti
+source .venv/bin/activate             # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-
-# 4. Konfigurirati environment
 cp .env.example .env
-
-# 5. Pokrenuti Ollama model
 ollama pull llama3.1:8b
-
-# 6. Pokrenuti server
 uvicorn main:app --reload
 ```
 
-Backend je dostupan na **http://localhost:8000**  
-Swagger dokumentacija: **http://localhost:8000/docs**
-
-### Frontend
+U drugom terminalu:
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-Frontend je dostupan na **http://localhost:5173**
+- API dokumentacija: <http://localhost:8000/docs>
+- Web sučelje: <http://localhost:5173>
 
----
+Konfiguracijske putanje računaju se od korijena projekta, pa pokretanje ne ovisi o trenutnom direktoriju procesa. Upload je ograničen varijablom `MAX_UPLOAD_BYTES`; zadana vrijednost je 250 MB.
 
-## Korištenje
+## Radni tok
 
-1. **Upload** — Uploadaj CSV fajl s mrežnim logovima
-2. **Index** — Klikni "Index into Vector Store" da se logovi embedaju i pohrane
-3. **Filter** — Filtriraj logove po izvornoj/odredišnoj IP adresi, vremenskom prozoru, protokolu ili akciji
-4. **Query** — Postavi pitanje na prirodnom jeziku i dobij strukturirani sigurnosni izvještaj
+1. Učitaj CSV na stranici **Upload**.
+2. Indeksiraj datoteku. Backend normalizira tokove, sprema ih u SQLite i u ChromaDB zapisuje agregirane incidente.
+3. Na stranici **Query** odaberi indeksiranu datoteku i postavi pitanje.
+4. Provjeri `evidence_highlights` i pripadajuće incidente. `similarity` je rangirajući kosinusni rezultat, ne kalibrirano povjerenje.
+5. Baseline trening iz sučelja služi demonstraciji. Rezultat slučajnog splita nije glavni rezultat diplomskog rada.
 
-### Format CSV fajla
+Način analize HTTP payloada namjerno je onemogućen: CICIDS tokovi ne sadrže izvorni sadržaj HTTP zahtjeva, pa se iz njih ne može pošteno evaluirati payload detekcija SQL injectiona ili XSS-a.
 
-Sustav prepoznaje sljedeće nazive stupaca:
+## Fine-tuning i evaluacija
 
-| Polje | Prihvaćeni nazivi stupaca |
-|-------|--------------------------|
-| Timestamp | `timestamp`, `time`, `date`, `datetime` |
-| Izvorišna IP | `src_ip`, `source_ip`, `src`, `ip_src` |
-| Odredišna IP | `dst_ip`, `destination_ip`, `dst`, `ip_dst` |
-| Protokol | `protocol`, `proto` |
-| Akcija | `flag`, `action`, `event`, `label` |
+Detaljne naredbe, metodologija i očekivani artefakti opisani su u [experiments/README.md](experiments/README.md). Kandidati su:
 
----
+| Ključ | Model | Licenca | Uloga |
+|---|---|---|---|
+| `qwen3-1.7b` | `Qwen/Qwen3-1.7B` | Apache-2.0 | mali opći instruct model |
+| `smollm3-3b` | `HuggingFaceTB/SmolLM3-3B` | Apache-2.0 | kompaktan 3B model |
+| `phi4-mini` | `microsoft/Phi-4-mini-instruct` | MIT | snažniji mali instruct model |
 
-## Sigurnosni izvještaj
+Za svaki model mjeri se najmanje: accuracy, macro-F1, per-class precision/recall/F1, matrica zabune, stopa nevaljanog JSON-a, medijan i p95 latencije te propusnost. Base i fine-tuned varijanta koriste isti zaključani testni skup. CSE-CIC-IDS2018 preporučen je kao **vanjski test distribucijskog pomaka**, a ne kao nekontrolirani dodatak trening skupu.
 
-Svaki RAG upit vraća strukturirani JSON izvještaj:
+Notebook [NetlogRAG_FineTuning_v3.ipynb](notebooks/NetlogRAG_FineTuning_v3.ipynb) je tanki Colab orkestrator nad verzioniranim skriptama. Raniji `NetlogRAG_FineTuning_v2.ipynb` ostaje povijesni pilot i nije prepisan.
 
-```json
-{
-  "risk_level": "HIGH | MEDIUM | LOW",
-  "summary": "Kratko objašnjenje situacije",
-  "key_indicators": ["Indikator 1", "Indikator 2"],
-  "recommended_actions": ["Akcija 1", "Akcija 2"],
-  "evidence_highlights": [
-    {
-      "id": "naziv_fajla.csv:3",
-      "reason": "Zašto je ovaj log bitan"
-    }
-  ]
-}
+## Testovi i provjere
+
+```bash
+pip install -r requirements-dev.txt
+ruff check .
+pytest -q --cov=app
+
+cd frontend
+npm ci
+npm run lint
+npm run build
+npm audit --omit=dev
 ```
 
----
+GitHub Actions izvršava backend testove te frontend lint i build za push i pull request.
 
-## Literatura
+## Ograničenja i prijetnje valjanosti
 
-- Lewis, P. et al. (2020). *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks*. NeurIPS.
-- Canadian Institute for Cybersecurity. [CICIDS2017 Dataset](https://www.unb.ca/cic/datasets/ids-2017.html)
-- ChromaDB Documentation. https://docs.trychroma.com
-- LlamaIndex Documentation. https://docs.llamaindex.ai
-- FastAPI Documentation. https://fastapi.tiangolo.com
+- CICIDS2017 je laboratorijski i stariji skup; rezultati se ne mogu automatski prenijeti na suvremenu produkcijsku mrežu.
+- Duplikatno grupirani slučajni split smanjuje izravno curenje, ali ne uklanja korelaciju istog dana/scenarija. Za strožu tvrdnju treba dodatno prijaviti rezultat podjele po datoteci ili danu.
+- Klase su izrazito neuravnotežene; zato je macro-F1 primarna metrika, a accuracy pomoćna.
+- LLM klasifikator pretvara numeričke značajke u tekst. To povećava trošak i možda neće nadmašiti tablični ML; usporedba mora uključiti kvalitetu i brzinu.
+- Lokalno izvođenje smanjuje slanje podataka trećim stranama, ali samo po sebi ne osigurava GDPR usklađenost ni sigurnu implementaciju.
+- “Real-time” sposobnost prihvaća se samo ako izmjerena propusnost na navedenom hardveru zadovoljava unaprijed definiran prometni cilj.
+
+## Reproduktivnost i podaci
+
+Veliki CSV-ovi, modeli, SQLite/Chroma datoteke, adapteri i GGUF artefakti namjerno nisu u repozitoriju. `prepare_dataset.py` u izvještaj zapisuje SHA-256 izvora, seed, broj primjera po klasi, odbačene konflikte i split protokol. Time se rezultat može povezati s točnim ulazima bez objavljivanja osjetljivih podataka.
+
+Primarni skup: [CICIDS2017](https://www.unb.ca/cic/datasets/ids-2017.html). Predloženi vanjski skup: [CSE-CIC-IDS2018](https://www.unb.ca/cic/datasets/ids-2018.html).
+
+## Literatura i tehnički izvori
+
+- Lewis et al. (2020), *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks*, NeurIPS.
+- Hu et al. (2022), *LoRA: Low-Rank Adaptation of Large Language Models*, ICLR.
+- Dettmers et al. (2023), *QLoRA: Efficient Finetuning of Quantized LLMs*, NeurIPS.
+- [Qwen3-1.7B model card](https://huggingface.co/Qwen/Qwen3-1.7B)
+- [SmolLM3-3B model card](https://huggingface.co/HuggingFaceTB/SmolLM3-3B)
+- [Phi-4-mini-instruct model card](https://huggingface.co/microsoft/Phi-4-mini-instruct)
+- [TRL SFTTrainer documentation](https://huggingface.co/docs/trl/sft_trainer)
+- [Transformers bitsandbytes documentation](https://huggingface.co/docs/transformers/quantization/bitsandbytes)
+
+## Licenca
+
+Repozitorij trenutačno nema deklariranu licencu. Prije javne distribucije potrebno je dodati licencu projekta i provjeriti uvjete distribucije svih modela i skupova podataka.

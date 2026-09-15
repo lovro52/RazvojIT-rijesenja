@@ -1,0 +1,18 @@
+{
+  "qwen3-1.7b": {
+    "model_id": "Qwen/Qwen3-1.7B",
+    "license": "Apache-2.0",
+    "trust_remote_code": false
+  },
+  "smollm3-3b": {
+    "model_id": "HuggingFaceTB/SmolLM3-3B",
+    "license": "Apache-2.0",
+    "trust_remote_code": false
+  },
+  "phi4-mini": {
+    "model_id": "microsoft/Phi-4-mini-instruct",
+    "license": "MIT",
+    "trust_remote_code": true
+  }
+}
+

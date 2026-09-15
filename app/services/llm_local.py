@@ -1,216 +1,191 @@
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+
 import json
 import time
+from enum import StrEnum
+from typing import Any
+
 import ollama
+from pydantic import BaseModel, Field, ValidationError
 
 from app.core.config import OLLAMA_MODEL
 
-SYSTEM_PROMPT = """
-Ti si cybersecurity analitičar koji analizira mrežne logove.
-
-Tvoj zadatak je:
-1. procijeniti razinu rizika (LOW, MEDIUM, HIGH),
-2. kratko objasniti što logovi sugeriraju,
-3. navesti glavne indikatore sumnjivog ponašanja,
-4. preporučiti sljedeće korake.
-
-Vrati ISKLJUČIVO JSON u ovom formatu (bez markdowna, bez ``` blokova):
-
-{
-  "risk_level": "LOW|MEDIUM|HIGH",
-  "summary": "kratko objašnjenje",
-  "key_indicators": ["indikator 1", "indikator 2"],
-  "recommended_actions": ["akcija 1", "akcija 2"],
-  "evidence_highlights": [
-    {
-      "id": "id loga",
-      "reason": "zašto je bitan"
-    }
-  ]
-}
-
-Ne vraćaj ništa osim JSON-a.
-"""
+PROMPT_VERSION = "flow-incident-v2"
 
 
-def generate_local_security_report(
-    query:    str,
-    evidence: List[Dict[str, Any]],
-    model:    Optional[str] = None,
-) -> Dict[str, Any]:
-    """
-    Generate a security report using the specified model.
-    Returns the report dict plus inference_ms timing.
-    """
-    selected_model = model or OLLAMA_MODEL
-
-    compact = [
-        {
-            "id":       e.get("id"),
-            "distance": e.get("distance"),
-            "document": e.get("document"),
-            "metadata": e.get("metadata"),
-        }
-        for e in evidence
-    ]
-
-    t0 = time.perf_counter()
-
-    response = ollama.chat(
-        model=selected_model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": json.dumps(
-                {"query": query, "evidence": compact}, ensure_ascii=False
-            )},
-        ],
-        options={"temperature": 0.2},
-    )
-
-    inference_ms = round((time.perf_counter() - t0) * 1000, 1)
-
-    raw = response["message"]["content"].strip()
-
-    # Strip accidental markdown fences
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-
-    try:
-        report = json.loads(raw)
-    except Exception:
-        report = {"error": "Model nije vratio valjan JSON", "raw": raw}
-
-    report["inference_ms"]   = inference_ms
-    report["model_used"]     = selected_model
-
-    return report
+class DetectionMode(StrEnum):
+    AUTO = "auto"
+    FLOW = "flow"
+    TEXT = "text"
 
 
-SYSTEM_PROMPT_TEXT = """
-Ti si cybersecurity analitičar specijaliziran za analizu WEB napada u HTTP logovima.
+class RiskLevel(StrEnum):
+    UNKNOWN = "UNKNOWN"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
 
-Fokusiraj se na:
-- SQL Injection pokušaje (UNION, SELECT, DROP, WHERE u URL parametrima)
-- XSS napade (script, alert, onclick u zahtjevima)
-- Command injection (;, |, && u parametrima)
-- Anomalne HTTP zahtjeve i neobične user-agente
 
-Vrati ISKLJUČIVO JSON (bez markdowna):
-{
-  "risk_level": "LOW|MEDIUM|HIGH",
-  "summary": "kratko objašnjenje",
-  "key_indicators": ["indikator 1", "indikator 2"],
-  "recommended_actions": ["akcija 1", "akcija 2"],
-  "evidence_highlights": [{"id": "id loga", "reason": "zašto je bitan"}],
-  "detection_mode": "text"
-}
-"""
+class EvidenceHighlight(BaseModel):
+    id: str
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class SecurityReport(BaseModel):
+    risk_level: RiskLevel
+    summary: str = Field(min_length=1, max_length=2000)
+    key_indicators: list[str] = Field(default_factory=list, max_length=10)
+    recommended_actions: list[str] = Field(default_factory=list, max_length=10)
+    evidence_highlights: list[EvidenceHighlight] = Field(default_factory=list, max_length=20)
+
 
 SYSTEM_PROMPT_FLOW = """
-Ti si cybersecurity analitičar specijaliziran za analizu MREŽNOG PROMETA.
+Ti si pomoćnik analitičaru kibernetičke sigurnosti. Analiziraš samo dostavljene
+agregirane vremenske prozore mrežnih tokova. Ne proglašavaj napad na temelju
+jednog porta ili jedne TCP zastavice. Port scan, brute-force i DoS/DDoS zahtijevaju
+ponavljajući ili agregirani obrazac. Ne koristi znanje koje nije vidljivo u dokazima.
 
-Fokusiraj se na:
-- DDoS i DoS napade (visoki broj paketa, kratki tokovi)
-- Port scan aktivnosti (veze na mnogo portova s iste IP adrese)
-- Brute force napade (ponavljajuće veze na isti port)
-- Botnet komunikaciju (periodički promet, C&C obrasci)
-
-Analiziraj numeričke karakteristike toka: Flow Duration, Total Fwd Packets,
-Flow Bytes/s, SYN Flag Count, broj veza itd.
-
-Vrati ISKLJUČIVO JSON (bez markdowna):
+Ako dokazi nisu dovoljni, vrati risk_level UNKNOWN i jasno navedi koje informacije
+nedostaju. Svaki evidence_highlights.id mora biti identičan jednom dostavljenom ID-u.
+Vrati samo valjan JSON sa sljedećim poljima:
 {
-  "risk_level": "LOW|MEDIUM|HIGH",
-  "summary": "kratko objašnjenje",
-  "key_indicators": ["indikator 1", "indikator 2"],
-  "recommended_actions": ["akcija 1", "akcija 2"],
-  "evidence_highlights": [{"id": "id loga", "reason": "zašto je bitan"}],
-  "detection_mode": "flow"
+  "risk_level": "UNKNOWN|LOW|MEDIUM|HIGH",
+  "summary": "sažetak utemeljen na dokazima",
+  "key_indicators": ["opaženi mjerljivi indikator"],
+  "recommended_actions": ["razmjerna sljedeća radnja"],
+  "evidence_highlights": [{"id": "dostavljeni ID", "reason": "obrazloženje"}]
 }
-"""
-
-WEB_KEYWORDS = [
-    "sql", "injection", "xss", "script", "http", "url", "web",
-    "request", "payload", "cross-site", "command", "injection",
-    "get", "post", "header", "cookie", "union", "select",
-]
-
-FLOW_KEYWORDS = [
-    "ddos", "dos", "flood", "port scan", "portscan", "botnet",
-    "brute force", "ssh", "ftp", "syn", "packet", "flow",
-    "bandwidth", "traffic", "connection", "slowloris", "hulk",
-]
+""".strip()
 
 
-def _detect_mode(query: str) -> str:
-    """Auto-detect whether query is about text/web or network-flow attacks."""
-    q_lower = query.lower()
-    text_score = sum(1 for kw in WEB_KEYWORDS  if kw in q_lower)
-    flow_score = sum(1 for kw in FLOW_KEYWORDS if kw in q_lower)
-    if text_score > flow_score:
-        return "text"
-    if flow_score > text_score:
-        return "flow"
-    return "flow"  # default to flow for network logs
+class UnsupportedDetectionModeError(ValueError):
+    pass
+
+
+def _extract_json(raw: str) -> dict[str, Any]:
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end < start:
+        raise ValueError("Model nije vratio JSON objekt.")
+    return json.loads(text[start : end + 1])
+
+
+def _validated_report(raw: str, evidence_ids: set[str]) -> tuple[dict[str, Any], list[str]]:
+    warnings: list[str] = []
+    try:
+        report = SecurityReport.model_validate(_extract_json(raw))
+    except (ValueError, json.JSONDecodeError, ValidationError) as exc:
+        return (
+            SecurityReport(
+                risk_level=RiskLevel.UNKNOWN,
+                summary="Lokalni model nije vratio izvještaj koji odgovara propisanoj JSON shemi.",
+                recommended_actions=["Pregledaj sirovi izlaz i ponovi analizu."],
+            ).model_dump(mode="json"),
+            [f"Nevaljan izlaz modela: {exc}"],
+        )
+
+    valid_highlights = []
+    for highlight in report.evidence_highlights:
+        if highlight.id in evidence_ids:
+            valid_highlights.append(highlight)
+        else:
+            warnings.append(f"Odbačen je nepostojeći ID dokaza: {highlight.id}")
+    report.evidence_highlights = valid_highlights
+    return report.model_dump(mode="json"), warnings
+
+
+def _insufficient_evidence(model: str, mode: str) -> dict[str, Any]:
+    report = SecurityReport(
+        risk_level=RiskLevel.UNKNOWN,
+        summary="Nema dovoljno relevantnih indeksiranih dokaza za pouzdan zaključak.",
+        recommended_actions=[
+            "Odaberi indeksiranu datoteku ili proširi skup relevantnih vremenskih prozora."
+        ],
+    ).model_dump(mode="json")
+    report.update(
+        {
+            "inference_ms": 0.0,
+            "model_used": model,
+            "detection_mode": mode,
+            "prompt_version": PROMPT_VERSION,
+            "evidence_count": 0,
+            "validation_warnings": [],
+        }
+    )
+    return report
 
 
 def generate_local_security_report_mode(
-    query:    str,
-    evidence: List[Dict[str, Any]],
-    model:    Optional[str] = None,
-    mode:     str = "auto",
-) -> Dict[str, Any]:
-    """Generate a security report with detection mode awareness."""
+    query: str,
+    evidence: list[dict[str, Any]],
+    model: str | None = None,
+    mode: str = "auto",
+) -> dict[str, Any]:
     selected_model = model or OLLAMA_MODEL
+    detection_mode = DetectionMode(mode)
+    if detection_mode is DetectionMode.TEXT:
+        raise UnsupportedDetectionModeError(
+            "Web/text analiza je onemogućena jer mrežni flow dataset nema HTTP URL, "
+            "zaglavlja ni payload potreban za valjanu detekciju SQLi/XSS napada."
+        )
+    detection_mode = DetectionMode.FLOW
 
-    if mode == "auto":
-        mode = _detect_mode(query)
-
-    prompt = SYSTEM_PROMPT_TEXT if mode == "text" else SYSTEM_PROMPT_FLOW
+    if not evidence:
+        return _insufficient_evidence(selected_model, detection_mode.value)
 
     compact = [
         {
-            "id":       e.get("id"),
-            "distance": e.get("distance"),
-            "document": e.get("document"),
-            "metadata": e.get("metadata"),
+            "id": item.get("id"),
+            "similarity": item.get("similarity"),
+            "incident": item.get("document"),
+            "metadata": item.get("metadata"),
         }
-        for e in evidence
+        for item in evidence
     ]
+    evidence_ids = {str(item["id"]) for item in compact if item.get("id")}
 
-    t0 = time.perf_counter()
-
+    started = time.perf_counter()
     response = ollama.chat(
         model=selected_model,
         messages=[
-            {"role": "system", "content": prompt},
-            {"role": "user",   "content": json.dumps(
-                {"query": query, "evidence": compact}, ensure_ascii=False
-            )},
+            {"role": "system", "content": SYSTEM_PROMPT_FLOW},
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {"question": query, "incident_evidence": compact},
+                    ensure_ascii=False,
+                ),
+            },
         ],
-        options={"temperature": 0.2},
+        format="json",
+        options={"temperature": 0, "seed": 42},
     )
-
-    inference_ms = round((time.perf_counter() - t0) * 1000, 1)
-
-    raw = response["message"]["content"].strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-
-    try:
-        report = json.loads(raw)
-    except Exception:
-        report = {"error": "Model nije vratio valjan JSON", "raw": raw}
-
-    report["inference_ms"]    = inference_ms
-    report["model_used"]      = selected_model
-    report["detection_mode"]  = mode
-
+    inference_ms = round((time.perf_counter() - started) * 1000, 1)
+    raw = str(response["message"]["content"])
+    report, warnings = _validated_report(raw, evidence_ids)
+    report.update(
+        {
+            "inference_ms": inference_ms,
+            "model_used": selected_model,
+            "detection_mode": detection_mode.value,
+            "prompt_version": PROMPT_VERSION,
+            "evidence_count": len(evidence),
+            "validation_warnings": warnings,
+        }
+    )
     return report
+
+
+def generate_local_security_report(
+    query: str,
+    evidence: list[dict[str, Any]],
+    model: str | None = None,
+) -> dict[str, Any]:
+    return generate_local_security_report_mode(query, evidence, model, "flow")

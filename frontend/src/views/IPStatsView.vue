@@ -14,7 +14,8 @@
         <div class="panel-header">Izvorne IP adrese</div>
         <div v-if="loadingIps" class="loading">Učitavanje...</div>
         <div v-else class="ip-list">
-          <div
+          <button
+            type="button"
             v-for="item in ips"
             :key="item.ip"
             class="ip-item"
@@ -23,7 +24,7 @@
           >
             <span class="ip-addr">{{ item.ip }}</span>
             <span class="ip-count">{{ item.count }}</span>
-          </div>
+          </button>
           <div v-if="ips.length === 0" class="empty-list">
             Nema podataka. Uploadaj i indeksiraj logove.
           </div>
@@ -97,7 +98,7 @@
               <div class="detail-card-title"><span class="accent">◈</span> Kontaktirane IP adrese</div>
               <div class="contacted-list">
                 <div v-for="c in detail.contacted_ips" :key="c.dst_ip" class="contacted-item">
-                  <span class="contacted-ip" @click="selectIp(c.dst_ip)">{{ c.dst_ip }}</span>
+                  <button type="button" class="contacted-ip" @click="selectIp(c.dst_ip)">{{ c.dst_ip }}</button>
                   <span class="contacted-count">{{ c.count }}×</span>
                 </div>
               </div>
@@ -105,27 +106,27 @@
 
             <!-- Risk assessment -->
             <div class="detail-card">
-              <div class="detail-card-title"><span class="ok">⬡</span> Procjena rizika</div>
+              <div class="detail-card-title"><span class="ok">⬡</span> Prometni signali — nisu dokaz napada</div>
               <div class="risk-assess">
                 <div class="risk-row" v-if="hasPsh">
                   <span class="risk-dot danger"></span>
-                  <span>PSH paketi detektirani — moguće exfiltriranje podataka</span>
+                  <span>Prisutan je PSH promet; potreban je kontekst sesije prije sigurnosnog zaključka.</span>
                 </div>
                 <div class="risk-row" v-if="targetsSSH">
                   <span class="risk-dot danger"></span>
-                  <span>Konekcije na port 22 (SSH) — mogući brute-force</span>
+                  <span>Prisutne su veze na SSH port 22; sama uporaba porta ne znači brute-force napad.</span>
                 </div>
                 <div class="risk-row" v-if="targetsRDP">
                   <span class="risk-dot danger"></span>
-                  <span>Konekcije na port 3389 (RDP) — visoki rizik</span>
+                  <span>Prisutne su veze na RDP port 3389; provjeri učestalost i autentikacijske događaje.</span>
                 </div>
                 <div class="risk-row" v-if="manySynPorts">
                   <span class="risk-dot warn"></span>
-                  <span>SYN paketi na više portova — mogući port scan</span>
+                  <span>SYN promet obuhvaća više portova; agregirani obrazac zahtijeva daljnju provjeru.</span>
                 </div>
                 <div class="risk-row" v-if="!hasPsh && !targetsSSH && !targetsRDP && !manySynPorts">
                   <span class="risk-dot ok"></span>
-                  <span>Nije detektirana sumnjiva aktivnost</span>
+                  <span>Odabrane jednostavne heuristike nisu izdvojile prometni signal.</span>
                 </div>
               </div>
             </div>
@@ -180,7 +181,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import axios from 'axios'
+import api from '../services/api'
 
 const ips           = ref([])
 const selectedIp    = ref(null)
@@ -204,7 +205,7 @@ const manySynPorts = computed(() => {
 async function loadIps() {
   loadingIps.value = true
   try {
-    const { data } = await axios.get('/logs/ips')
+    const { data } = await api.get('/logs/ips')
     ips.value = data.ips
   } catch (e) {
     console.error(e)
@@ -218,7 +219,7 @@ async function selectIp(ip) {
   detail.value        = null
   loadingDetail.value = true
   try {
-    const { data } = await axios.get(`/logs/ips/${ip}`)
+    const { data } = await api.get(`/logs/ips/${encodeURIComponent(ip)}`)
     detail.value = data
   } catch (e) {
     console.error(e)
@@ -286,7 +287,8 @@ onMounted(loadIps)
 .ip-item {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0.6rem 1rem; cursor: pointer; transition: all 0.15s;
-  border-bottom: 1px solid var(--border); font-size: 0.82rem;
+  border: 0; border-bottom: 1px solid var(--border); font-size: 0.82rem;
+  width: 100%; background: transparent; color: inherit; text-align: left;
 }
 .ip-item:last-child { border-bottom: none; }
 .ip-item:hover { background: var(--bg-hover); }
@@ -372,7 +374,7 @@ onMounted(loadIps)
 .contacted-ip {
   font-size: 0.8rem; color: var(--accent); cursor: pointer;
   text-decoration: underline; text-decoration-color: transparent;
-  transition: text-decoration-color 0.2s;
+  transition: text-decoration-color 0.2s; background: none; border: 0; padding: 0;
 }
 .contacted-ip:hover { text-decoration-color: var(--accent); }
 .contacted-count { font-size: 0.75rem; color: var(--muted); }

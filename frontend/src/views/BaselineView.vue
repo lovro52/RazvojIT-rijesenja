@@ -197,7 +197,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import api, { errorMessage } from '../services/api'
 
 const status     = ref({ trained: false })
 const files      = ref([])
@@ -210,16 +210,20 @@ const trainResult = ref(null)
 
 async function loadStatus() {
   try {
-    const { data } = await axios.get('/logs/baseline/status')
+    const { data } = await api.get('/logs/baseline/status')
     status.value = data
-  } catch (e) { console.error(e) }
+  } catch (e) {
+    trainError.value = errorMessage(e, 'Nije moguće učitati status modela.')
+  }
 }
 
 async function loadFiles() {
   try {
-    const { data } = await axios.get('/logs/files')
+    const { data } = await api.get('/logs/files')
     files.value = data.files ?? []
-  } catch (e) { console.error(e) }
+  } catch (e) {
+    trainError.value = errorMessage(e, 'Nije moguće učitati datoteke.')
+  }
 }
 
 async function runTrain() {
@@ -231,7 +235,7 @@ async function runTrain() {
     : null
 
   try {
-    const { data } = await axios.post('/logs/baseline/train', null, {
+    const { data } = await api.post('/logs/baseline/train', null, {
       params: { filename: trainFile.value, sample_size: sampleSize.value }
     })
     if (data.error) {
@@ -241,7 +245,7 @@ async function runTrain() {
       await loadStatus()
     }
   } catch (e) {
-    trainError.value = e.response?.data?.detail ?? 'Treniranje nije uspjelo.'
+    trainError.value = errorMessage(e, 'Treniranje nije uspjelo.')
   } finally {
     training.value  = false
     trainNote.value = null

@@ -1,21 +1,33 @@
 from __future__ import annotations
-import sqlite3
-from pathlib import Path
-from typing import Any, Dict, List, Optional
 
-DB_PATH = Path("data/logs.db")
+import json
+import sqlite3
+from typing import Any
+
+from app.core.config import DB_PATH
+
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(DB_PATH), timeout=10)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 10000")
     return conn
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, definition: str) -> None:
+    column = definition.split()[0]
+    columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
 
 
 def init_db() -> None:
     """Create tables if they don't exist."""
     with get_conn() as conn:
+        conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS uploaded_files (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,7 +48,9 @@ def init_db() -> None:
                 protocol    TEXT,
                 bytes       INTEGER,
                 action      TEXT,
-                message     TEXT
+                message     TEXT,
+                original_row_index INTEGER,
+                ground_truth TEXT
             );
 
             CREATE INDEX IF NOT EXISTS idx_log_src_ip    ON log_records(src_ip);
@@ -56,6 +70,13 @@ def init_db() -> None:
                 evidence_count INTEGER
             );
         """)
+        _ensure_column(conn, "log_records", "original_row_index INTEGER")
+        _ensure_column(conn, "log_records", "ground_truth TEXT")
+        _ensure_column(conn, "query_history", "model_used TEXT")
+        _ensure_column(conn, "query_history", "detection_mode TEXT")
+        _ensure_column(conn, "query_history", "source_file TEXT")
+        _ensure_column(conn, "query_history", "evidence_ids TEXT")
+        _ensure_column(conn, "query_history", "prompt_version TEXT")
 
 
 def save_uploaded_file(filename: str, uploaded_at: str, rows: int) -> None:
@@ -64,7 +85,10 @@ def save_uploaded_file(filename: str, uploaded_at: str, rows: int) -> None:
             """
             INSERT INTO uploaded_files (filename, uploaded_at, rows, indexed)
             VALUES (?, ?, ?, 0)
-            ON CONFLICT(filename) DO UPDATE SET rows=excluded.rows
+            ON CONFLICT(filename) DO UPDATE SET
+                uploaded_at=excluded.uploaded_at,
+                rows=excluded.rows,
+                indexed=0
             """,
             (filename, uploaded_at, rows),
         )
@@ -78,7 +102,7 @@ def mark_file_indexed(filename: str) -> None:
         )
 
 
-def save_log_records(records: List[Dict[str, Any]], source_file: str) -> None:
+def save_log_records(records: list[dict[str, Any]], source_file: str) -> None:
     """Insert normalised records into SQLite (replace existing for same source)."""
     with get_conn() as conn:
         conn.execute("DELETE FROM log_records WHERE source_file = ?", (source_file,))
@@ -86,8 +110,8 @@ def save_log_records(records: List[Dict[str, Any]], source_file: str) -> None:
             """
             INSERT INTO log_records
                 (source_file, timestamp, src_ip, dst_ip, src_port, dst_port,
-                 protocol, bytes, action, message)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 protocol, bytes, action, message, original_row_index, ground_truth)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -101,26 +125,28 @@ def save_log_records(records: List[Dict[str, Any]], source_file: str) -> None:
                     r.get("bytes"),
                     r.get("action"),
                     r.get("message"),
+                    r.get("original_row_index"),
+                    r.get("ground_truth"),
                 )
                 for r in records
             ],
         )
 
 
-def list_uploaded_files() -> List[Dict[str, Any]]:
+def list_uploaded_files() -> list[dict[str, Any]]:
     with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM uploaded_files ORDER BY uploaded_at DESC"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM uploaded_files ORDER BY uploaded_at DESC").fetchall()
     return [dict(r) for r in rows]
 
 
-def get_dashboard_stats() -> Dict[str, Any]:
+def get_dashboard_stats() -> dict[str, Any]:
     """Return aggregated stats for the dashboard."""
     with get_conn() as conn:
         total_records = conn.execute("SELECT COUNT(*) FROM log_records").fetchone()[0]
-        total_files   = conn.execute("SELECT COUNT(*) FROM uploaded_files").fetchone()[0]
-        indexed_files = conn.execute("SELECT COUNT(*) FROM uploaded_files WHERE indexed = 1").fetchone()[0]
+        total_files = conn.execute("SELECT COUNT(*) FROM uploaded_files").fetchone()[0]
+        indexed_files = conn.execute(
+            "SELECT COUNT(*) FROM uploaded_files WHERE indexed = 1"
+        ).fetchone()[0]
 
         protocol_dist = conn.execute(
             "SELECT protocol, COUNT(*) as count FROM log_records GROUP BY protocol ORDER BY count DESC"
@@ -143,32 +169,32 @@ def get_dashboard_stats() -> Dict[str, Any]:
         ).fetchall()
 
     return {
-        "total_records":   total_records,
-        "total_files":     total_files,
-        "indexed_files":   indexed_files,
-        "protocol_dist":   [dict(r) for r in protocol_dist],
-        "action_dist":     [dict(r) for r in action_dist],
-        "top_src_ips":     [dict(r) for r in top_src_ips],
-        "top_dst_ports":   [dict(r) for r in top_dst_ports],
-        "recent_files":    [dict(r) for r in recent_files],
+        "total_records": total_records,
+        "total_files": total_files,
+        "indexed_files": indexed_files,
+        "protocol_dist": [dict(r) for r in protocol_dist],
+        "action_dist": [dict(r) for r in action_dist],
+        "top_src_ips": [dict(r) for r in top_src_ips],
+        "top_dst_ports": [dict(r) for r in top_dst_ports],
+        "recent_files": [dict(r) for r in recent_files],
     }
 
 
 def filter_logs(
-    src_ip:     Optional[str] = None,
-    dst_ip:     Optional[str] = None,
-    hours:      Optional[int] = None,
-    protocol:   Optional[str] = None,
-    action:     Optional[str] = None,
-    source_file: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+    src_ip: str | None = None,
+    dst_ip: str | None = None,
+    hours: int | None = None,
+    protocol: str | None = None,
+    action: str | None = None,
+    source_file: str | None = None,
+) -> list[dict[str, Any]]:
     """
     Filter log records from SQLite.
     `hours` filters records where timestamp >= now - hours.
     All other filters are exact/partial matches.
     """
-    clauses: List[str] = []
-    params:  List[Any] = []
+    clauses: list[str] = []
+    params: list[Any] = []
 
     if src_ip:
         clauses.append("src_ip LIKE ?")
@@ -186,34 +212,38 @@ def filter_logs(
         clauses.append("source_file = ?")
         params.append(source_file)
     if hours:
-        clauses.append(
-            "timestamp >= datetime('now', ? || ' hours')"
-        )
+        clauses.append("datetime(timestamp) >= datetime('now', ? || ' hours')")
         params.append(f"-{hours}")
 
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
-    sql   = f"SELECT * FROM log_records {where} ORDER BY timestamp DESC LIMIT 500"
+    sql = f"SELECT * FROM log_records {where} ORDER BY timestamp DESC LIMIT 500"
 
     with get_conn() as conn:
         rows = conn.execute(sql, params).fetchall()
 
     return [dict(r) for r in rows]
 
+
 def save_query(
     query: str,
     top_k: int,
-    report: Dict[str, Any],
+    report: dict[str, Any],
     evidence_count: int,
     queried_at: str,
+    model_used: str | None = None,
+    detection_mode: str | None = None,
+    source_file: str | None = None,
+    evidence_ids: list[str] | None = None,
+    prompt_version: str | None = None,
 ) -> None:
-    import json
     with get_conn() as conn:
         conn.execute(
             """
             INSERT INTO query_history
                 (queried_at, query, top_k, risk_level, summary, key_indicators,
-                 recommended_actions, evidence_count)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 recommended_actions, evidence_count, model_used, detection_mode,
+                 source_file, evidence_ids, prompt_version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 queried_at,
@@ -224,12 +254,16 @@ def save_query(
                 json.dumps(report.get("key_indicators", []), ensure_ascii=False),
                 json.dumps(report.get("recommended_actions", []), ensure_ascii=False),
                 evidence_count,
+                model_used,
+                detection_mode,
+                source_file,
+                json.dumps(evidence_ids or [], ensure_ascii=False),
+                prompt_version,
             ),
         )
 
 
-def get_query_history(limit: int = 50) -> List[Dict[str, Any]]:
-    import json
+def get_query_history(limit: int = 50) -> list[dict[str, Any]]:
     with get_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM query_history ORDER BY queried_at DESC LIMIT ?",
@@ -238,13 +272,14 @@ def get_query_history(limit: int = 50) -> List[Dict[str, Any]]:
     result = []
     for r in rows:
         d = dict(r)
-        d["key_indicators"]      = json.loads(d["key_indicators"] or "[]")
+        d["key_indicators"] = json.loads(d["key_indicators"] or "[]")
         d["recommended_actions"] = json.loads(d["recommended_actions"] or "[]")
+        d["evidence_ids"] = json.loads(d.get("evidence_ids") or "[]")
         result.append(d)
     return result
 
 
-def get_dashboard_stats_with_history(recent_queries: int = 5) -> Dict[str, Any]:
+def get_dashboard_stats_with_history(recent_queries: int = 5) -> dict[str, Any]:
     """Extend dashboard stats with recent query count."""
     stats = get_dashboard_stats()
     with get_conn() as conn:
@@ -253,7 +288,7 @@ def get_dashboard_stats_with_history(recent_queries: int = 5) -> Dict[str, Any]:
     return stats
 
 
-def get_ip_stats(ip: str) -> Dict[str, Any]:
+def get_ip_stats(ip: str) -> dict[str, Any]:
     """Return detailed statistics for a specific IP address."""
     with get_conn() as conn:
         # Total appearances as source
@@ -270,7 +305,7 @@ def get_ip_stats(ip: str) -> Dict[str, Any]:
         actions = conn.execute(
             """SELECT action, COUNT(*) as count FROM log_records
                WHERE src_ip = ? GROUP BY action ORDER BY count DESC""",
-            (ip,)
+            (ip,),
         ).fetchall()
 
         # Target ports this IP connected to
@@ -278,7 +313,7 @@ def get_ip_stats(ip: str) -> Dict[str, Any]:
             """SELECT dst_port, COUNT(*) as count FROM log_records
                WHERE src_ip = ? AND dst_port IS NOT NULL
                GROUP BY dst_port ORDER BY count DESC LIMIT 10""",
-            (ip,)
+            (ip,),
         ).fetchall()
 
         # Source ports used
@@ -286,7 +321,7 @@ def get_ip_stats(ip: str) -> Dict[str, Any]:
             """SELECT src_port, COUNT(*) as count FROM log_records
                WHERE src_ip = ? AND src_port IS NOT NULL
                GROUP BY src_port ORDER BY count DESC LIMIT 10""",
-            (ip,)
+            (ip,),
         ).fetchall()
 
         # IPs this IP talked to
@@ -294,7 +329,7 @@ def get_ip_stats(ip: str) -> Dict[str, Any]:
             """SELECT dst_ip, COUNT(*) as count FROM log_records
                WHERE src_ip = ? AND dst_ip IS NOT NULL
                GROUP BY dst_ip ORDER BY count DESC LIMIT 10""",
-            (ip,)
+            (ip,),
         ).fetchall()
 
         # All log records involving this IP
@@ -302,7 +337,7 @@ def get_ip_stats(ip: str) -> Dict[str, Any]:
             """SELECT * FROM log_records
                WHERE src_ip = ? OR dst_ip = ?
                ORDER BY timestamp DESC LIMIT 100""",
-            (ip, ip)
+            (ip, ip),
         ).fetchall()
 
         # Total bytes sent
@@ -311,19 +346,19 @@ def get_ip_stats(ip: str) -> Dict[str, Any]:
         ).fetchone()[0]
 
     return {
-        "ip":            ip,
-        "as_source":     as_src,
+        "ip": ip,
+        "as_source": as_src,
         "as_destination": as_dst,
-        "total_bytes":   total_bytes or 0,
-        "actions":       [dict(r) for r in actions],
-        "dst_ports":     [dict(r) for r in dst_ports],
-        "src_ports":     [dict(r) for r in src_ports],
+        "total_bytes": total_bytes or 0,
+        "actions": [dict(r) for r in actions],
+        "dst_ports": [dict(r) for r in dst_ports],
+        "src_ports": [dict(r) for r in src_ports],
         "contacted_ips": [dict(r) for r in contacted_ips],
-        "records":       [dict(r) for r in records],
+        "records": [dict(r) for r in records],
     }
 
 
-def list_all_ips() -> List[Dict[str, Any]]:
+def list_all_ips() -> list[dict[str, Any]]:
     """Return all unique IPs with their appearance count."""
     with get_conn() as conn:
         rows = conn.execute(
@@ -335,14 +370,19 @@ def list_all_ips() -> List[Dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def keyword_search(query: str, limit: int = 10) -> List[Dict[str, Any]]:
+def keyword_search(
+    query: str, limit: int = 10, source_file: str | None = None
+) -> list[dict[str, Any]]:
     """Simple keyword search across log messages and IP fields."""
     terms = query.strip().split()
     if not terms:
         return []
 
     clauses = []
-    params  = []
+    params = []
+    if source_file:
+        clauses.append("source_file = ?")
+        params.append(source_file)
     for term in terms:
         clauses.append(
             "(message LIKE ? OR src_ip LIKE ? OR dst_ip LIKE ? OR action LIKE ? OR protocol LIKE ?)"
@@ -351,7 +391,7 @@ def keyword_search(query: str, limit: int = 10) -> List[Dict[str, Any]]:
         params.extend([like, like, like, like, like])
 
     where = " AND ".join(clauses)
-    sql   = f"SELECT * FROM log_records WHERE {where} ORDER BY timestamp DESC LIMIT ?"
+    sql = f"SELECT * FROM log_records WHERE {where} ORDER BY timestamp DESC LIMIT ?"
     params.append(limit)
 
     with get_conn() as conn:

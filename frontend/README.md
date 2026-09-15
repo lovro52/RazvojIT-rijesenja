@@ -1,44 +1,18 @@
-# frontend
+# NetlogRAG frontend
 
-This template should help get you started developing with Vue 3 in Vite.
+Vue 3 + Vite sučelje za lokalni FastAPI backend.
 
-## Recommended IDE Setup
-
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
-
-## Recommended Browser Setup
-
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
-
-```sh
-npm install
-```
-
-### Compile and Hot-Reload for Development
-
-```sh
+```bash
+npm ci
 npm run dev
 ```
 
-### Compile and Minify for Production
+Backend se očekuje na `http://localhost:8000`. Produkcijska provjera:
 
-```sh
-npm run build
-```
-
-### Lint with [ESLint](https://eslint.org/)
-
-```sh
+```bash
 npm run lint
+npm run build
+npm audit --omit=dev
 ```
+
+Formalni eksperimentalni rezultati ne izvode se iz UI usporedbe modela. Za njih koristi skripte u `../experiments` kako bi modeli dijelili isti zaključani testni skup.

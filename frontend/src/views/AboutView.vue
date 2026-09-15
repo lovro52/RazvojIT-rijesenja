@@ -21,7 +21,7 @@
           <span class="hbadge">Vue 3</span>
           <span class="hbadge">ChromaDB</span>
           <span class="hbadge">Ollama</span>
-          <span class="hbadge">LLaMA 3.1</span>
+          <span class="hbadge">Više lokalnih LLM-ova</span>
         </div>
       </div>
       <div class="hero-stats">
@@ -52,12 +52,12 @@
           <div class="arch-icon" style="color: #a78bfa">◈</div>
           <div class="arch-name">Vektorska baza</div>
           <div class="arch-tech">ChromaDB + all-MiniLM-L6-v2</div>
-          <div class="arch-desc">Semantičko pretraživanje log zapisa putem vektorskih embeddinga.</div>
+          <div class="arch-desc">Semantičko rangiranje agregiranih vremenskih prozora mrežnog prometa.</div>
         </div>
         <div class="arch-card">
           <div class="arch-icon" style="color: var(--warn)">🧠</div>
           <div class="arch-name">Jezični model</div>
-          <div class="arch-tech">Ollama + LLaMA 3.1</div>
+          <div class="arch-tech">Ollama + otvoreni modeli</div>
           <div class="arch-desc">Lokalno pokretanje LLM modela za generiranje sigurnosnih izvještaja.</div>
         </div>
         <div class="arch-card">
@@ -91,7 +91,7 @@
           <div class="step-num">2</div>
           <div class="step-content">
             <div class="step-title">Embedding i indeksiranje</div>
-            <div class="step-desc">Svaki log zapis se pretvara u numerički vektor (embedding) korištenjem all-MiniLM-L6-v2 modela i pohranjuje u ChromaDB vektorsku bazu.</div>
+            <div class="step-desc">Tokovi se grupiraju po izvornoj adresi i vremenskom prozoru. Sažeci incidenata pretvaraju se u vektore i pohranjuju u ChromaDB.</div>
           </div>
         </div>
         <div class="flow-arrow">↓</div>
@@ -99,7 +99,7 @@
           <div class="step-num">3</div>
           <div class="step-content">
             <div class="step-title">Semantička pretraga</div>
-            <div class="step-desc">Korisnički upit se pretvara u vektor i uspoređuje s vektorima logova. Pronalaze se semantički najrelevantnije zapise — čak i bez točnog podudaranja teksta.</div>
+            <div class="step-desc">Korisnički upit rangira agregirane incidente po kosinusnoj sličnosti. Rezultat je heuristički signal za dohvat, a ne vjerojatnost napada.</div>
           </div>
         </div>
         <div class="flow-arrow">↓</div>
@@ -124,7 +124,7 @@
           <div class="privacy-desc">
             Mrežni logovi sadrže IP adrese, portove i obrasce prometa —
             osjetljive poslovne informacije koje ne smiju napustiti organizaciju.
-            Lokalni model garantira da podaci ostaju na uređaju.
+            U lokalnoj konfiguraciji sadržaj upita ne mora se slati vanjskom LLM API-ju.
           </div>
         </div>
         <div class="privacy-card critical">
@@ -132,9 +132,9 @@
           <div class="privacy-title">GDPR usklađenost</div>
           <div class="privacy-badge">Kritično</div>
           <div class="privacy-desc">
-            Slanje log podataka vanjskim cloud API servisima može kršiti
-            GDPR regulativu EU. Lokalno pokretanje eliminira taj pravni rizik
-            i potrebu za ugovorima o obradi podataka.
+            Lokalna obrada može smanjiti prijenos osobnih i mrežnih podataka trećim
+            stranama. Sama arhitektura ipak ne dokazuje GDPR usklađenost; potrebne su
+            pravna osnova, pravila zadržavanja, kontrola pristupa i procjena rizika.
           </div>
         </div>
         <div class="privacy-card important">
@@ -152,9 +152,9 @@
           <div class="privacy-title">Dugoročni troškovi</div>
           <div class="privacy-badge important-badge">Važno</div>
           <div class="privacy-desc">
-            Cloud API servisi naplaćuju po upitu — za sustav koji analizira
-            tisuće logova dnevno, troškovi rastu eksponencijalno.
-            Lokalni model je jednokratna instalacija.
+            Cloud API servisi često naplaćuju potrošnju, dok lokalno izvođenje ima
+            trošak hardvera, električne energije i održavanja. Isplativost ovisi o
+            opterećenju i mora se mjeriti za konkretan scenarij.
           </div>
         </div>
         <div class="privacy-card important">
@@ -162,9 +162,9 @@
           <div class="privacy-title">Latencija</div>
           <div class="privacy-badge important-badge">Važno</div>
           <div class="privacy-desc">
-            Bez mrežnih troškova komunikacije s cloud servisima,
-            lokalni model daje brži odgovor — ključno za real-time
-            monitoring i detekciju prijetnji.
+            Lokalna obrada uklanja internetski mrežni put, ali ukupna latencija ovisi
+            o hardveru, modelu i kvantizaciji. Projekt zato izvještava medijan, p95 i
+            propusnost umjesto da unaprijed tvrdi rad u stvarnom vremenu.
           </div>
         </div>
         <div class="privacy-card important">
@@ -172,9 +172,9 @@
           <div class="privacy-title">Fine-tuning</div>
           <div class="privacy-badge important-badge">Važno</div>
           <div class="privacy-desc">
-            Cloud modeli (OpenAI, Claude, Gemini) ne mogu se
-            fine-tunati za specifičnu domenu. Samo lokalni modeli
-            se mogu specijalizirati za cybersecurity analizu.
+            Modeli otvorenih težina omogućuju kontroliran QLoRA fine-tuning,
+            reproducibilan izvoz i lokalno izvođenje. To je eksperimentalna prednost,
+            ali ne znači da svi cloud servisi isključuju prilagodbu modela.
           </div>
         </div>
       </div>
@@ -182,7 +182,7 @@
 
     <!-- Detection modes -->
     <div class="section">
-      <div class="section-title">🎯 Dva načina detekcije</div>
+      <div class="section-title">🎯 Opseg detekcije</div>
       <div class="modes-grid">
         <div class="mode-card">
           <div class="mode-header text-mode">
@@ -190,14 +190,14 @@
             <span class="mode-name">Text / Payload mode</span>
           </div>
           <div class="mode-body">
-            <div class="mode-desc">Analiza tekstualnih logova i HTTP payloada. LLM razumije semantiku napada.</div>
+            <div class="mode-desc">Nije podržano u trenutnom prototipu jer CICIDS značajke ne sadrže izvorni HTTP payload.</div>
             <div class="mode-attacks">
               <span class="attack-chip">SQL Injection</span>
               <span class="attack-chip">XSS</span>
               <span class="attack-chip">Command Injection</span>
               <span class="attack-chip">HTTP anomalije</span>
             </div>
-            <div class="mode-advantage">✓ LLM pristup superioran — razumije kontekst</div>
+            <div class="mode-advantage">Izvan opsega evaluacije; za ovo je potreban zaseban payload skup podataka.</div>
           </div>
         </div>
         <div class="mode-card">
@@ -213,7 +213,7 @@
               <span class="attack-chip">Brute Force</span>
               <span class="attack-chip">Botnet</span>
             </div>
-            <div class="mode-advantage">⚖️ Klasični ML vs LLM — usporedba u evaluaciji</div>
+            <div class="mode-advantage">Klasični ML i LLM uspoređuju se istim splitom i macro-F1 metrikom.</div>
           </div>
         </div>
       </div>
@@ -221,7 +221,7 @@
 
     <!-- Datasets -->
     <div class="section">
-      <div class="section-title">📁 Korišteni dataseti</div>
+      <div class="section-title">📁 Skupovi podataka</div>
       <div class="datasets-list">
         <div class="dataset-row">
           <div class="ds-info">
@@ -248,7 +248,7 @@
             <span class="attack-chip">DoS</span>
             <span class="attack-chip">DDoS</span>
           </div>
-          <span class="ds-size">~16M zapisa</span>
+          <span class="ds-size">planiran vanjski test</span>
         </div>
       </div>
     </div>

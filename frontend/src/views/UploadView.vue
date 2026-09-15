@@ -117,7 +117,7 @@
 
 <script setup>
 import { ref } from 'vue'
-import axios from 'axios'
+import api, { errorMessage } from '../services/api'
 
 const fileInput     = ref(null)
 const selectedFile  = ref(null)
@@ -142,7 +142,7 @@ function onDrop(e) {
 
 function selectFile(f) {
   if (!f.name.toLowerCase().endsWith('.csv')) {
-    error.value = 'Only .csv files are accepted.'
+    error.value = 'Prihvaćaju se samo CSV datoteke.'
     return
   }
   selectedFile.value = f
@@ -167,10 +167,10 @@ async function uploadFile() {
   try {
     const fd = new FormData()
     fd.append('file', selectedFile.value)
-    const { data } = await axios.post('/logs/upload', fd)
+    const { data } = await api.post('/logs/upload', fd, { timeout: 120_000 })
     uploadResult.value = data
   } catch (e) {
-    error.value = e.response?.data?.detail ?? 'Upload failed.'
+    error.value = errorMessage(e, 'Učitavanje nije uspjelo.')
   } finally {
     uploading.value = false
   }
@@ -181,11 +181,14 @@ async function indexFile() {
   indexing.value = true
   error.value    = null
   try {
-    const { data } = await axios.post(`/logs/index?filename=${uploadResult.value.filename}`)
+    const { data } = await api.post('/logs/index', null, {
+      params: { filename: uploadResult.value.filename },
+      timeout: 0,
+    })
     indexResult.value = data
     indexed.value     = true
   } catch (e) {
-    error.value = e.response?.data?.detail ?? 'Indexing failed.'
+    error.value = errorMessage(e, 'Indeksiranje nije uspjelo.')
   } finally {
     indexing.value = false
   }

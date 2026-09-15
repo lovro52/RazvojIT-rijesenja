@@ -100,11 +100,11 @@
             class="record-card sem-card"
           >
             <div class="similarity-bar">
-              <span class="sim-label">Sličnost</span>
+              <span class="sim-label">Rang-sličnost</span>
               <div class="sim-track">
-                <div class="sim-fill" :style="{ width: similarityPct(r.distance) + '%' }"></div>
+                <div class="sim-fill" :style="{ width: similarityPct(r) + '%' }"></div>
               </div>
-              <span class="sim-pct">{{ similarityPct(r.distance) }}%</span>
+              <span class="sim-pct">{{ (r.similarity ?? 0).toFixed(3) }}</span>
             </div>
             <div class="record-message">{{ r.document }}</div>
             <div class="record-meta">
@@ -140,7 +140,7 @@
           <span class="summary-value">{{ result.semantic.time_ms }} ms</span>
         </div>
         <div class="summary-item wide">
-          <span class="summary-label">Razlika u rezultatima</span>
+          <span class="summary-label">Napomena</span>
           <span class="summary-value" :class="diffClass">
             {{ diffText }}
           </span>
@@ -153,7 +153,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import axios from 'axios'
+import api, { errorMessage } from '../services/api'
 
 const query   = ref('')
 const topK    = ref(5)
@@ -171,19 +171,7 @@ const diffClass = computed(() => {
 
 const diffText = computed(() => {
   if (!result.value) return ''
-  const kw  = result.value.keyword.count
-  const sem = result.value.semantic.count
-
-  // Check overlap by comparing messages
-  const kwMessages  = new Set(result.value.keyword.results.map(r => r.message))
-  const semMessages = new Set(result.value.semantic.results.map(r => r.document))
-  const overlap = [...kwMessages].filter(m => semMessages.has(m)).length
-  const unique  = sem - overlap
-
-  if (overlap === sem && overlap === kw) return 'Identični rezultati'
-  if (unique > 0) return `Semantika pronašla ${unique} dodatnih relevantnih logova koje keyword nije`
-  if (sem < kw)   return `Keyword pronašao više rezultata (${kw - sem} više)`
-  return 'Slični rezultati'
+  return result.value.methodological_note
 })
 
 async function runCompare() {
@@ -192,20 +180,19 @@ async function runCompare() {
   error.value   = null
   result.value  = null
   try {
-    const { data } = await axios.get('/logs/compare', {
+    const { data } = await api.get('/logs/compare', {
       params: { q: query.value, top_k: topK.value }
     })
     result.value = data
   } catch (e) {
-    error.value = e.response?.data?.detail ?? 'Pretraga nije uspjela.'
+    error.value = errorMessage(e, 'Pretraga nije uspjela.')
   } finally {
     loading.value = false
   }
 }
 
-function similarityPct(distance) {
-  // Convert distance to similarity percentage (lower distance = higher similarity)
-  return Math.max(0, Math.round((1 - distance / 2) * 100))
+function similarityPct(result) {
+  return Math.round((result.similarity ?? 0) * 100)
 }
 
 function actionClass(action) {

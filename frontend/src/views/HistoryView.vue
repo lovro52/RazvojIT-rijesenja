@@ -80,7 +80,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import axios from 'axios'
+import api from '../services/api'
 
 const history  = ref([])
 const loading  = ref(false)
@@ -89,7 +89,7 @@ const expanded = ref(null)
 async function loadHistory() {
   loading.value = true
   try {
-    const { data } = await axios.get('/logs/history')
+    const { data } = await api.get('/logs/history')
     history.value = data.history
   } catch (e) {
     console.error(e)
