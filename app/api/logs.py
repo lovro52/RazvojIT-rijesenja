@@ -359,3 +359,133 @@ async def query_rag_local_mode(
         "report":   report,
         "evidence": retrieved,
     }
+
+
+# ── Klasifikacija toka fine-tunanim modelom ────────────────────────────────
+from app.services.llm_classifier import (
+    ClassifierError, classify_batch, classify_flow,
+)
+
+
+@router.get("/classifier/models", summary="Fine-tunani modeli za klasifikaciju toka")
+async def classifier_models():
+    from app.core.config import CLASSIFIER_MODEL, FINETUNED_MODELS
+    from app.core.flow_schema import ATTACK_TYPES, SCHEMA_VERSION
+
+    available = []
+    try:
+        import ollama
+        installed = {m.get("name", "").split(":")[0]
+                     for m in ollama.list().get("models", [])}
+    except Exception:
+        installed = set()
+
+    for m in FINETUNED_MODELS:
+        available.append({**m, "installed": m["id"] in installed})
+
+    return {
+        "models":         available,
+        "default":        CLASSIFIER_MODEL,
+        "schema_version": SCHEMA_VERSION,
+        "attack_types":   ATTACK_TYPES,
+    }
+
+
+@router.post("/classifier/classify", summary="Klasificiraj tokove iz uploadane datoteke")
+async def classifier_classify(
+    filename: str           = Query(..., description="Naziv uploadane CSV datoteke"),
+    limit:    int           = Query(20,  description="Broj tokova (inferenca je spora)"),
+    model:    Optional[str] = Query(None, description="ID fine-tunanog modela"),
+):
+    file_path = _upload_dir / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Datoteka nije pronađena")
+
+    import pandas as pd
+    try:
+        df = pd.read_csv(file_path, low_memory=False, encoding="latin-1")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"CSV se ne može pročitati: {e}")
+
+    records = normalize_dataframe(df, max_rows=max(limit * 5, 100))
+    usable  = [r for r in records if r.get("flow_features")]
+
+    if not usable:
+        raise HTTPException(
+            status_code=400,
+            detail="Datoteka nema značajke toka potrebne za klasifikaciju "
+                   "(očekuje se CICIDS2017 format).",
+        )
+
+    try:
+        result = classify_batch(usable, model=model, limit=limit)
+    except ClassifierError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    result["filename"] = filename
+    return result
+
+
+@router.post("/classifier/compare_rag", summary="Klasifikator vs RAG na istom toku")
+async def classifier_compare_rag(
+    filename:   str           = Query(..., description="Naziv uploadane CSV datoteke"),
+    row_index:  int           = Query(0,   description="Indeks reda"),
+    classifier: Optional[str] = Query(None, description="Fine-tunani model"),
+    rag_model:  Optional[str] = Query(None, description="Opći model za RAG"),
+):
+    """
+    Pokreće oba pristupa na istom toku.
+
+    Klasifikator dobiva samo taj tok i prompt iz treninga; RAG sloj dobiva
+    semantički dohvaćene dokaze i opći sustavski prompt. Usporedba pokazuje
+    razliku u brzini i u tome što svaki pristup uopće može reći.
+    """
+    file_path = _upload_dir / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Datoteka nije pronađena")
+
+    import pandas as pd
+    df      = pd.read_csv(file_path, low_memory=False, encoding="latin-1")
+    records = normalize_dataframe(df, max_rows=max(row_index + 10, 100))
+
+    if row_index >= len(records):
+        raise HTTPException(status_code=400, detail="Indeks reda izvan raspona")
+
+    rec = records[row_index]
+    if not rec.get("flow_features"):
+        raise HTTPException(status_code=400, detail="Red nema značajke toka")
+
+    try:
+        cls = classify_flow(rec["flow_features"], rec.get("protocol"), classifier)
+    except ClassifierError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    retrieved = semantic_search(query=rec["message"], top_k=5)["results"]
+    rag       = generate_local_security_report(
+        query=rec["message"], evidence=retrieved, model=rag_model
+    )
+
+    return {
+        "flow": {
+            "message":      rec["message"],
+            "src_ip":       rec.get("src_ip"),
+            "dst_ip":       rec.get("dst_ip"),
+            "dst_port":     rec.get("dst_port"),
+            "ground_truth": rec.get("ground_truth"),
+        },
+        "classifier": {
+            "attack_type":  cls["attack_type"],
+            "risk_level":   cls["risk_level"],
+            "summary":      cls["summary"],
+            "inference_ms": cls["inference_ms"],
+            "model":        cls["model_used"],
+            "warnings":     cls["warnings"],
+        },
+        "rag": {
+            "risk_level":   rag.get("risk_level"),
+            "summary":      rag.get("summary"),
+            "inference_ms": rag.get("inference_ms"),
+            "model":        rag.get("model_used"),
+            "evidence_count": len(retrieved),
+        },
+    }

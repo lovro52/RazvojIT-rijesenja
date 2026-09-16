@@ -2,6 +2,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 import pandas as pd
 
+from app.core.flow_schema import TRAINING_FLOW_FEATURES
+
 
 def _get_first(row: pd.Series, candidates: List[str]) -> Optional[Any]:
     """Return the first non-null value from `row` matching any of the candidate column names."""
@@ -79,7 +81,23 @@ def normalize_dataframe(df: pd.DataFrame, max_rows: int = 5000) -> List[Dict[str
             except (TypeError, ValueError):
                 protocol = str(protocol).strip().upper()
 
-        # Dodatne karakteristike toka koje model treba analizirati
+        # Sirove značajke toka — isti popis i isti redoslijed kao u fine-tuningu.
+        # Čuvaju se kao podaci (ne samo kao tekst) da klasifikator može
+        # rekonstruirati točno onaj prompt na kojem je model treniran.
+        flow_features: dict[str, float] = {}
+        for col in TRAINING_FLOW_FEATURES:
+            val = _get_first(row, [col])
+            if val is None:
+                continue
+            try:
+                v = float(val)
+            except (TypeError, ValueError):
+                continue
+            if v != v or v in (float("inf"), float("-inf")):  # NaN / Inf
+                continue
+            flow_features[col] = v
+
+        # Skraćeni prikaz za `message` (čita ga RAG sloj i semantička pretraga)
         flow_bits = []
         for col, short in [
             ("Flow Duration",      "duration"),
@@ -136,6 +154,7 @@ def normalize_dataframe(df: pd.DataFrame, max_rows: int = 5000) -> List[Dict[str
             "message":   message,
             # Istinita oznaka — samo za evaluaciju i prikaz, ne za model
             "ground_truth": ground_truth,
+            "flow_features": flow_features,
             "tags":      ["network", "log"],
         })
 
