@@ -88,6 +88,11 @@ def classify_flow(
         response = ollama.generate(
             model=selected,
             prompt=prompt,
+            # raw=True zaobilazi Modelfile TEMPLATE. Prompt je već potpun —
+            # gradi ga `build_classification_prompt` iz zajedničke sheme.
+            # Bez ovoga Ollama omota prompt još jednom i model dobije
+            # ulaz kakav u treningu nikad nije vidio.
+            raw=True,
             options={
                 "temperature": 0.1,
                 "num_predict": 220,

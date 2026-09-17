@@ -1,0 +1,73 @@
+{
+  "model": "llama32-netlograg-v3",
+  "kvantizacija": "Q4_K_M (GGUF, Ollama, CPU)",
+  "n_samples": 50,
+  "attack_type_accuracy_pct": 84.0,
+  "risk_level_accuracy_pct": 90.0,
+  "macro_f1": 0.8422,
+  "json_parse_pct": 98.0,
+  "latency_mean_ms": 212.5,
+  "latency_p50_ms": 188.8,
+  "latency_p95_ms": 313.8,
+  "per_class": {
+    "BENIGN": {
+      "precision": 0.5,
+      "recall": 0.5,
+      "f1": 0.5,
+      "support": 4
+    },
+    "DDoS": {
+      "precision": 1.0,
+      "recall": 0.5455,
+      "f1": 0.7059,
+      "support": 11
+    },
+    "DoS": {
+      "precision": 0.5833,
+      "recall": 1.0,
+      "f1": 0.7368,
+      "support": 7
+    },
+    "FTP-Patator": {
+      "precision": 1.0,
+      "recall": 0.9091,
+      "f1": 0.9524,
+      "support": 11
+    },
+    "PortScan": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 1
+    },
+    "SSH-Patator": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 8
+    },
+    "WebAttack": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 8
+    }
+  },
+  "confusion": {
+    "FTP-Patator->FTP-Patator": 10,
+    "WebAttack->WebAttack": 8,
+    "SSH-Patator->SSH-Patator": 8,
+    "DoS->DoS": 7,
+    "DDoS->DDoS": 6,
+    "DDoS->DoS": 3,
+    "BENIGN->DoS": 2,
+    "BENIGN->BENIGN": 2,
+    "PortScan->PortScan": 1,
+    "DDoS->PARSE_FAIL": 1,
+    "DDoS->BENIGN": 1,
+    "FTP-Patator->BENIGN": 1
+  },
+  "split_identican_colabu": true,
+  "uklonjeno_duplikata": 243,
+  "izvor_testnog_skupa": "rekonstrukcija iz CSV-ova"
+}

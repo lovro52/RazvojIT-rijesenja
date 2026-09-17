@@ -51,7 +51,15 @@ INSTRUCTION = (
     "i procijeni razinu rizika. Vrati ISKLJUČIVO JSON."
 )
 
-PROTO_MAP = {6: "TCP", 17: "UDP", 1: "ICMP", 0: "HOPOPT"}
+# Namjerno se poklapa s treningom, a ne s IANA popisom protokola.
+# Notebook (ćelija 12) mapira {"6": "TCP", "17": "UDP", "1": "ICMP"}, a sve
+# ostalo — uključujući protokol 0 (HOPOPT), koji se u CICIDS2017 pojavljuje —
+# svodi na "TCP". Model je te tokove dakle vidio kao "TCP tok.". Kad bi im
+# aplikacija slala "HOPOPT tok." ili "OTHER tok.", to bi bio ulaz kakav model
+# nikad nije vidio. Ispravak taksonomije zahtijeva ponovni trening, pa se ovdje
+# svjesno zadržava ponašanje iz treninga.
+PROTO_MAP = {6: "TCP", 17: "UDP", 1: "ICMP"}
+PROTO_FALLBACK = "TCP"
 
 # Kratice kolona — moraju se poklapati s onima iz treninga
 _SHORT = {
@@ -92,15 +100,15 @@ def build_flow_input(
             continue
         parts.append(f"{_SHORT[col]}={v:.1f}")
 
-    proto = "TCP"
-    if isinstance(protocol, str) and protocol.strip().upper() in {
-        "TCP", "UDP", "ICMP", "HOPOPT", "OTHER"
-    }:
+    proto = PROTO_FALLBACK
+    if isinstance(protocol, str) and protocol.strip().upper() in set(
+        PROTO_MAP.values()
+    ):
         proto = protocol.strip().upper()
     else:
         pv = _safe_float(protocol)
         if pv is not None:
-            proto = PROTO_MAP.get(int(pv), "OTHER")
+            proto = PROTO_MAP.get(int(pv), PROTO_FALLBACK)
 
     return f"{proto} tok. " + ", ".join(parts)
 

@@ -9,6 +9,7 @@ import IPStatsView    from './views/IPStatsView.vue'
 import CompareView    from './views/CompareView.vue'
 import ModelsView     from './views/ModelsView.vue'
 import BaselineView   from './views/BaselineView.vue'
+import ClassifierView from './views/ClassifierView.vue'
 import EvaluationView from './views/EvaluationView.vue'
 import QueryView      from './views/QueryView.vue'
 import HistoryView    from './views/HistoryView.vue'
@@ -27,6 +28,7 @@ const router = createRouter({
     { path: '/compare',    component: CompareView },
     { path: '/models',     component: ModelsView },
     { path: '/baseline',   component: BaselineView },
+    { path: '/classifier', component: ClassifierView },
     { path: '/evaluation', component: EvaluationView },
     { path: '/query',      component: QueryView },
     { path: '/history',    component: HistoryView },

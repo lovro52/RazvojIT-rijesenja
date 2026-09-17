@@ -1,0 +1,82 @@
+{
+  "model": "llama32-netlograg-v3",
+  "kvantizacija": "Q4_K_M (GGUF, Ollama, CPU)",
+  "n_samples": 597,
+  "attack_type_accuracy_pct": 88.1,
+  "risk_level_accuracy_pct": 93.5,
+  "macro_f1": 0.8821,
+  "json_parse_pct": 99.8,
+  "latency_mean_ms": 208.9,
+  "latency_p50_ms": 186.2,
+  "latency_p95_ms": 311.6,
+  "per_class": {
+    "BENIGN": {
+      "precision": 0.8519,
+      "recall": 0.8288,
+      "f1": 0.8402,
+      "support": 111
+    },
+    "DDoS": {
+      "precision": 1.0,
+      "recall": 0.6667,
+      "f1": 0.8,
+      "support": 120
+    },
+    "DoS": {
+      "precision": 0.6772,
+      "recall": 0.9247,
+      "f1": 0.7818,
+      "support": 93
+    },
+    "FTP-Patator": {
+      "precision": 1.0,
+      "recall": 0.9889,
+      "f1": 0.9944,
+      "support": 90
+    },
+    "PortScan": {
+      "precision": 0.7143,
+      "recall": 1.0,
+      "f1": 0.8333,
+      "support": 10
+    },
+    "SSH-Patator": {
+      "precision": 0.9385,
+      "recall": 0.9839,
+      "f1": 0.9606,
+      "support": 62
+    },
+    "WebAttack": {
+      "precision": 0.9558,
+      "recall": 0.973,
+      "f1": 0.9643,
+      "support": 111
+    }
+  },
+  "confusion": {
+    "WebAttack->WebAttack": 108,
+    "BENIGN->BENIGN": 92,
+    "FTP-Patator->FTP-Patator": 89,
+    "DoS->DoS": 86,
+    "DDoS->DDoS": 80,
+    "SSH-Patator->SSH-Patator": 61,
+    "DDoS->DoS": 31,
+    "PortScan->PortScan": 10,
+    "BENIGN->DoS": 9,
+    "DDoS->BENIGN": 8,
+    "DoS->BENIGN": 5,
+    "BENIGN->WebAttack": 5,
+    "BENIGN->SSH-Patator": 4,
+    "DoS->PortScan": 2,
+    "WebAttack->BENIGN": 2,
+    "FTP-Patator->BENIGN": 1,
+    "BENIGN->PortScan": 1,
+    "DDoS->PARSE_FAIL": 1,
+    "SSH-Patator->PortScan": 1,
+    "WebAttack->DoS": 1
+  },
+  "split_identican_colabu": true,
+  "uklonjeno_duplikata": 243,
+  "duplikati_uklonjeni": true,
+  "izvor_testnog_skupa": "rekonstrukcija iz CSV-ova"
+}

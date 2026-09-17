@@ -87,7 +87,7 @@ nije treniran na RAG promptu i na njemu bi radio lošije od općeg modela.
 
 | Metoda | Endpoint | Opis |
 |---|---|---|
-| GET | `/logs/classifier/models` | Popis modela i je li koji instaliran |
+| GET | `/logs/classifier/models_gguf` | Popis modela i je li koji instaliran |
 | POST | `/logs/classifier/classify` | Klasifikacija tokova iz datoteke |
 | POST | `/logs/classifier/compare_rag` | Klasifikator vs RAG na istom toku |
 

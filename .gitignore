@@ -28,3 +28,7 @@ models/
 *.gguf
 *.csv
 !sample_logs.csv
+
+*.gguf
+models_gguf/
+data/models/

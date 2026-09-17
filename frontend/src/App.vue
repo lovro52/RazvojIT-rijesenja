@@ -15,6 +15,7 @@
           <RouterLink to="/compare"    class="nav-link"><span class="nav-icon">⇌</span> Usporedi</RouterLink>
           <RouterLink to="/models"     class="nav-link"><span class="nav-icon">◈</span> Modeli</RouterLink>
           <RouterLink to="/baseline"   class="nav-link"><span class="nav-icon">⊶</span> Baseline</RouterLink>
+          <RouterLink to="/classifier" class="nav-link"><span class="nav-icon">◉</span> Klasifikator</RouterLink>
           <RouterLink to="/evaluation" class="nav-link"><span class="nav-icon">📊</span> Evaluacija</RouterLink>
           <RouterLink to="/query"      class="nav-link"><span class="nav-icon">⌕</span> Query</RouterLink>
           <RouterLink to="/history"    class="nav-link"><span class="nav-icon">◷</span> History</RouterLink>
