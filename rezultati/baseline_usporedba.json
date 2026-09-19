@@ -1,0 +1,220 @@
+{
+  "ocisceno": {
+    "random_forest": {
+      "model": "Random Forest",
+      "attack_type_accuracy_pct": 97.3,
+      "macro_f1": 0.9772,
+      "train_seconds": 0.3,
+      "latency_batch_ms_per_flow": 0.0568,
+      "latency_single_call_ms": 24.601,
+      "latency_single_call_p95_ms": 26.058,
+      "per_class": {
+        "BENIGN": {
+          "precision": 0.945,
+          "recall": 0.9279,
+          "f1": 0.9364,
+          "support": 111
+        },
+        "DDoS": {
+          "precision": 0.9917,
+          "recall": 1.0,
+          "f1": 0.9959,
+          "support": 120
+        },
+        "DoS": {
+          "precision": 0.9375,
+          "recall": 0.9677,
+          "f1": 0.9524,
+          "support": 93
+        },
+        "FTP-Patator": {
+          "precision": 1.0,
+          "recall": 0.9889,
+          "f1": 0.9944,
+          "support": 90
+        },
+        "PortScan": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 10
+        },
+        "SSH-Patator": {
+          "precision": 0.9839,
+          "recall": 0.9839,
+          "f1": 0.9839,
+          "support": 62
+        },
+        "WebAttack": {
+          "precision": 0.9818,
+          "recall": 0.973,
+          "f1": 0.9774,
+          "support": 111
+        }
+      }
+    },
+    "xgboost": {
+      "model": "XGBoost",
+      "attack_type_accuracy_pct": 97.5,
+      "macro_f1": 0.9784,
+      "train_seconds": 0.7,
+      "latency_batch_ms_per_flow": 0.0036,
+      "latency_single_call_ms": 0.32,
+      "latency_single_call_p95_ms": 0.468,
+      "per_class": {
+        "BENIGN": {
+          "precision": 0.9459,
+          "recall": 0.9459,
+          "f1": 0.9459,
+          "support": 111
+        },
+        "DDoS": {
+          "precision": 0.9917,
+          "recall": 1.0,
+          "f1": 0.9959,
+          "support": 120
+        },
+        "DoS": {
+          "precision": 0.9368,
+          "recall": 0.957,
+          "f1": 0.9468,
+          "support": 93
+        },
+        "FTP-Patator": {
+          "precision": 1.0,
+          "recall": 0.9889,
+          "f1": 0.9944,
+          "support": 90
+        },
+        "PortScan": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 10
+        },
+        "SSH-Patator": {
+          "precision": 0.9839,
+          "recall": 0.9839,
+          "f1": 0.9839,
+          "support": 62
+        },
+        "WebAttack": {
+          "precision": 0.9908,
+          "recall": 0.973,
+          "f1": 0.9818,
+          "support": 111
+        }
+      }
+    },
+    "n_samples": 597
+  },
+  "s_duplikatima": {
+    "random_forest": {
+      "model": "Random Forest",
+      "attack_type_accuracy_pct": 98.0,
+      "macro_f1": 0.9785,
+      "train_seconds": 0.4,
+      "latency_batch_ms_per_flow": 0.1716,
+      "latency_single_call_ms": 24.726,
+      "latency_single_call_p95_ms": 26.252,
+      "per_class": {
+        "BENIGN": {
+          "precision": 0.9524,
+          "recall": 0.9524,
+          "f1": 0.9524,
+          "support": 21
+        },
+        "DDoS": {
+          "precision": 0.9677,
+          "recall": 1.0,
+          "f1": 0.9836,
+          "support": 30
+        },
+        "DoS": {
+          "precision": 0.9677,
+          "recall": 0.9677,
+          "f1": 0.9677,
+          "support": 31
+        },
+        "FTP-Patator": {
+          "precision": 1.0,
+          "recall": 0.9697,
+          "f1": 0.9846,
+          "support": 33
+        },
+        "PortScan": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 32
+        },
+        "SSH-Patator": {
+          "precision": 0.9677,
+          "recall": 1.0,
+          "f1": 0.9836,
+          "support": 30
+        },
+        "WebAttack": {
+          "precision": 1.0,
+          "recall": 0.9565,
+          "f1": 0.9778,
+          "support": 23
+        }
+      }
+    },
+    "xgboost": {
+      "model": "XGBoost",
+      "attack_type_accuracy_pct": 98.0,
+      "macro_f1": 0.9785,
+      "train_seconds": 0.6,
+      "latency_batch_ms_per_flow": 0.0071,
+      "latency_single_call_ms": 0.356,
+      "latency_single_call_p95_ms": 0.577,
+      "per_class": {
+        "BENIGN": {
+          "precision": 0.9524,
+          "recall": 0.9524,
+          "f1": 0.9524,
+          "support": 21
+        },
+        "DDoS": {
+          "precision": 0.9677,
+          "recall": 1.0,
+          "f1": 0.9836,
+          "support": 30
+        },
+        "DoS": {
+          "precision": 0.9677,
+          "recall": 0.9677,
+          "f1": 0.9677,
+          "support": 31
+        },
+        "FTP-Patator": {
+          "precision": 1.0,
+          "recall": 0.9697,
+          "f1": 0.9846,
+          "support": 33
+        },
+        "PortScan": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 32
+        },
+        "SSH-Patator": {
+          "precision": 0.9677,
+          "recall": 1.0,
+          "f1": 0.9836,
+          "support": 30
+        },
+        "WebAttack": {
+          "precision": 1.0,
+          "recall": 0.9565,
+          "f1": 0.9778,
+          "support": 23
+        }
+      }
+    },
+    "n_samples": 200
+  }
+}

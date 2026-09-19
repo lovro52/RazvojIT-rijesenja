@@ -6,29 +6,27 @@ __pycache__/
 .venv-1/
 *.egg-info/
 
-# Data & uploads (ne pushaj osobne logove i bazu)
+# Podaci, baze i uploadani zapisi
 data/
 
-# Environment
+# Modeli — GGUF datoteke su stotine megabajta do nekoliko gigabajta
+models/
+models_gguf/
+*.gguf
+
+# Veliki CSV-ovi skupa podataka; primjeri i ogledni zapisi ostaju u repozitoriju
+*.csv
+!sample_logs.csv
+!examples/*.csv
+
+# Okolina
 .env
 
 # Node
 frontend/node_modules/
 frontend/dist/
 
-# VS Code
+# Uređivač i OS
 .vscode/
-
-# OS
 .DS_Store
 Thumbs.db
-
-data/
-models/
-*.gguf
-*.csv
-!sample_logs.csv
-
-*.gguf
-models_gguf/
-data/models/

@@ -168,16 +168,29 @@ def provjeri_modelfile(model: str) -> bool:
 
 
 def testiraj_model(model: str) -> dict[str, object]:
-    """Šalje tri toka s raw=True i broji koliko puta je dobiven ispravan JSON."""
+    """
+    Šalje tri toka s raw=True i provjerava DVIJE stvari odvojeno:
+    je li izlaz ispravan JSON i je li odgovor točan.
+
+    Razlika je bitna. Model kojem je izvoz pukao i dalje zna vraćati
+    besprijekoran JSON — samo u njemu uvijek piše ista klasa. Phi-3.5 je
+    upravo tako prošao 3/3 po JSON-u, a 0/3 po točnosti, i na punoj
+    evaluaciji ispao konstanta („DoS" za svaki tok, macro F1 0.047).
+    Zato sam JSON nikad nije dokaz da je fine-tuning preživio konverziju.
+    """
     print()
     print("─" * 70)
     print(f"2. GENERIRANJE (raw=True — Modelfile se zaobilazi) — {model}")
     print("─" * 70)
 
     uspjeha = 0
+    tocnih = 0
+    predikcije: list[str] = []
     trajanja: list[float] = []
 
     for naziv, proto, features in TEST_FLOWS:
+        # Očekivana klasa je prvi token naziva, prije zagrade.
+        ocekivano = naziv.split(" (")[0]
         print(f"\n   ▸ {naziv}")
         prompt = build_classification_prompt(features, proto)
 
@@ -214,13 +227,26 @@ def testiraj_model(model: str) -> dict[str, object]:
             continue
 
         uspjeha += 1
+        predvideno = str(payload.get("attack_type"))
+        predikcije.append(predvideno)
+
+        if predvideno == ocekivano:
+            tocnih += 1
+            oznaka = "✓"
+        else:
+            oznaka = "✗"
+
         print(
-            f"     ✓ attack_type={payload.get('attack_type')!r}  "
+            f"     {oznaka} attack_type={predvideno!r}  "
             f"risk_level={payload.get('risk_level')!r}  ({ms:.0f} ms)"
         )
+        if predvideno != ocekivano:
+            print(f"       ↳ očekivano {ocekivano!r} — JSON je ispravan, "
+                  f"odgovor nije")
 
     prosjek = sum(trajanja) / len(trajanja) if trajanja else None
-    return {"model": model, "json_ok": uspjeha, "ukupno": len(TEST_FLOWS),
+    return {"model": model, "json_ok": uspjeha, "tocnih": tocnih,
+            "predikcije": predikcije, "ukupno": len(TEST_FLOWS),
             "prosjek_ms": prosjek}
 
 
@@ -231,17 +257,50 @@ def zakljucak(rezultat: dict[str, object], template_ok: bool) -> None:
     print("═" * 70)
 
     ok = int(rezultat["json_ok"])
+    tocnih = int(rezultat.get("tocnih", 0))
+    predikcije = [str(p) for p in rezultat.get("predikcije", [])]  # type: ignore[union-attr]
     ukupno = int(rezultat["ukupno"])
     prosjek = rezultat["prosjek_ms"]
 
     print(f"   JSON odgovora: {ok}/{ukupno}")
+    print(f"   Točnih klasa:  {tocnih}/{ukupno}")
     if prosjek:
         print(f"   Prosječna inferenca: {prosjek:.0f} ms")
 
+    # Ispravan JSON s uvijek istom klasom je tipičan potpis pokvarenog
+    # izvoza — vidi docstring funkcije testiraj_model.
+    if len(predikcije) > 1 and len(set(predikcije)) == 1:
+        print()
+        print(f"   ✗ KOLAPS NA JEDNU KLASU — svih {len(predikcije)} odgovora "
+              f"glasi {predikcije[0]!r}.")
+        print("     Model vraća uredan JSON, ali ne gleda ulaz. Fine-tuning")
+        print("     nije preživio konverziju u GGUF.")
+        print()
+        print("     Potvrdi na punoj evaluaciji:")
+        print("       python scripts/evaluiraj_gguf.py --model <model> --limit 200")
+        print("     Ako je ondje točnost jednaka udjelu najbrojnije klase u")
+        print("     testnom skupu, model je konstanta. Dublja kvantizacija")
+        print("     (Q8 umjesto Q4) to obično ne popravlja, ali vrijedi")
+        print("     provjeriti radi usporedivosti s ostalim modelima.")
+        return
+
+    if ok == ukupno and tocnih == 0:
+        print()
+        print("   ✗ Format je ispravan, ali nijedan odgovor nije točan.")
+        print("     Sam JSON nije dokaz da su fine-tunane težine u GGUF-u.")
+        print("     Pokreni punu evaluaciju prije bilo kakvog zaključka.")
+        return
+
     if ok == ukupno:
         print()
-        print("   ✓ GGUF je ISPRAVAN — fine-tuning je preživio konverziju.")
+        print("   ✓ GGUF je upotrebljiv — fine-tuning je preživio konverziju.")
         print("     Aplikacija će raditi, jer `llm_classifier.py` šalje raw=True.")
+        if tocnih < ukupno:
+            print()
+            print(f"     Napomena: {ukupno - tocnih} od {ukupno} odgovora nije "
+                  f"točan. Tri")
+            print("     sintetička toka nisu mjerenje — pravi broj daje tek")
+            print("     `evaluiraj_gguf.py` na 200 primjera.")
         if not template_ok:
             print()
             print("     `ollama run` i dalje neće raditi dok se ne popravi")

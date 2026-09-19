@@ -367,18 +367,43 @@ from app.services.llm_classifier import (
 )
 
 
+def _instalirani_modeli() -> set[str]:
+    """Nazivi modela registriranih u Ollami, bez oznake verzije.
+
+    Oblik odgovora mijenjao se kroz verzije knjižnice `ollama`: starije vraćaju
+    rječnik s ključem "models" i poljem "name", novije objekt s atributom
+    `models` i poljem `model`. Podržavaju se oba oblika — inače se svi modeli
+    prikažu kao neregistrirani, i onda kad jesu.
+    """
+    try:
+        import ollama
+        odgovor = ollama.list()
+    except Exception:
+        return set()
+
+    stavke = getattr(odgovor, "models", None)
+    if stavke is None and isinstance(odgovor, dict):
+        stavke = odgovor.get("models", [])
+    if not stavke:
+        return set()
+
+    nazivi: set[str] = set()
+    for stavka in stavke:
+        naziv = getattr(stavka, "model", None) or getattr(stavka, "name", None)
+        if naziv is None and isinstance(stavka, dict):
+            naziv = stavka.get("model") or stavka.get("name")
+        if naziv:
+            nazivi.add(str(naziv).split(":")[0])
+    return nazivi
+
+
 @router.get("/classifier/models", summary="Fine-tunani modeli za klasifikaciju toka")
 async def classifier_models():
     from app.core.config import CLASSIFIER_MODEL, FINETUNED_MODELS
     from app.core.flow_schema import ATTACK_TYPES, SCHEMA_VERSION
 
     available = []
-    try:
-        import ollama
-        installed = {m.get("name", "").split(":")[0]
-                     for m in ollama.list().get("models", [])}
-    except Exception:
-        installed = set()
+    installed = _instalirani_modeli()
 
     for m in FINETUNED_MODELS:
         available.append({**m, "installed": m["id"] in installed})

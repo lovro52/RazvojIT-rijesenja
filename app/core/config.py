@@ -49,32 +49,42 @@ AVAILABLE_MODELS = [
 CLASSIFIER_MODEL: str = os.getenv("CLASSIFIER_MODEL", "llama32-netlograg-v3")
 
 # Fine-tunani modeli — klasifikacija pojedinog toka, NE RAG izvještaji.
+#
+# `accuracy` i `latency_ms` su vrijednosti izmjerene LOKALNO, na kvantiziranom
+# modelu koji aplikacija stvarno pokreće. Vrijednost prije izvoza u GGUF
+# navedena je odvojeno jer se kod nekih modela bitno razlikuje —
+# vidi rezultati/ i scripts/evaluiraj_gguf.py.
 FINETUNED_MODELS = [
     {
         "id":          "llama32-netlograg-v3",
         "name":        "LLaMA 3.2 1B (fine-tuned)",
         "base":        "meta-llama/Llama-3.2-1B-Instruct",
-        "description": "Najbrži — 3.0 s po toku, 98.0 % točnosti",
+        "description": "Jedini koji preživljava izvoz — 88.0 % uz 204 ms po toku",
         "size":        "1B parametara",
-        "accuracy":    98.0,
-        "latency_ms":  2998,
+        "accuracy":    88.0,
+        "latency_ms":  204,
+        "accuracy_pre_export": 98.0,
     },
     {
         "id":          "smollm2-netlograg-v3",
         "name":        "SmolLM2 1.7B (fine-tuned)",
         "base":        "HuggingFaceTB/SmolLM2-1.7B-Instruct",
-        "description": "Najtočniji — 98.5 %, ali 10.5 s po toku",
+        "description": "Ne preživljava GGUF izvoz — 26.0 % lokalno, 98.5 % prije",
         "size":        "1.7B parametara",
-        "accuracy":    98.5,
-        "latency_ms":  10486,
+        "accuracy":    26.0,
+        "latency_ms":  902,
+        "accuracy_pre_export": 98.5,
+        "broken_export": True,
     },
     {
         "id":          "phi35-netlograg-v3",
         "name":        "Phi-3.5 Mini (fine-tuned)",
         "base":        "microsoft/Phi-3.5-mini-instruct",
-        "description": "Najniži loss u treningu, najsporija inferenca",
+        "description": "Ne preživljava GGUF izvoz — 19.5 % lokalno, 98.0 % prije",
         "size":        "3.8B parametara",
-        "accuracy":    None,
-        "latency_ms":  None,
+        "accuracy":    19.5,
+        "latency_ms":  564,
+        "accuracy_pre_export": 98.0,
+        "broken_export": True,
     },
 ]

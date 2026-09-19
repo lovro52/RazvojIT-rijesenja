@@ -71,7 +71,12 @@ def normalize_dataframe(df: pd.DataFrame, max_rows: int = 5000) -> List[Dict[str
 
         action = str(action).strip() if action is not None else "UNKNOWN"
 
-        # Protokol može biti broj (CICIDS2017: 6, 17, 1) ili naziv (TCP, UDP)
+        # Protokol može biti broj (CICIDS2017: 6, 17, 1) ili naziv (TCP, UDP).
+        # Ovdje se zadržava stvarni naziv, uključujući HOPOPT za protokol 0,
+        # jer ovo polje ide u prikaz i metapodatke. Prompt za klasifikator NE
+        # koristi ovu vrijednost izravno: flow_schema.build_flow_input svodi
+        # sve osim TCP/UDP/ICMP na TCP, jer je model tako vidio te tokove pri
+        # treniranju. To razilaženje je namjerno i ne smije se 'popraviti'.
         proto_map = {"6": "TCP", "17": "UDP", "1": "ICMP", "0": "HOPOPT"}
         if protocol is None:
             protocol = "UNKNOWN"
