@@ -307,7 +307,7 @@ def evaluiraj(model: str, test: list[dict], limit: int,
     print(f"   Dekodiranje: {nacin}")
     print("   (prvi poziv uključuje učitavanje modela u memoriju)\n")
 
-    atk_ok = risk_ok = parsed = 0
+    atk_ok = risk_ok = parsed = neuspjeli = 0
     latencije: list[float] = []
     per_class = defaultdict(lambda: {"total": 0, "correct": 0})
     confusion: Counter = Counter()
@@ -318,16 +318,31 @@ def evaluiraj(model: str, test: list[dict], limit: int,
         per_class[istina]["total"] += 1
 
         t0 = time.perf_counter()
+        odgovor = greska = None
         try:
             odgovor = ollama.generate(
                 model=model, prompt=prompt, raw=True, options=opcije,
             )
         except Exception as exc:
-            sys.exit(f"\n   Greška pri pozivu Ollame: {exc}")
+            greska = exc
         ms = (time.perf_counter() - t0) * 1000
         # Prvi poziv uključuje učitavanje modela s diska i nije mjera inference.
-        if i > 1:
+        # Prekinuti poziv također nije mjera brzine pa se ne uračunava.
+        if i > 1 and odgovor is not None:
             latencije.append(ms)
+
+        if greska is not None:
+            # Ollama povremeno prekine generiranje, primjerice kad dosegne
+            # vlastitu granicu ponavljanja tokena. Takav se poziv bilježi kao
+            # neuspješan odgovor, a ne pretvara tiho u predviđanje klase;
+            # mjerenje se nastavlja da jedan tok ne sruši cijeli prolaz.
+            neuspjeli += 1
+            confusion[f"{istina}->POZIV_PREKINUT"] += 1
+            print(f"   ! {i}/{len(uzorak)} poziv prekinut: {greska}")
+            if i % 10 == 0 or i == len(uzorak):
+                print(f"   {i:>4}/{len(uzorak)}  točnost "
+                      f"{atk_ok / i * 100:5.1f} %  (zadnji poziv prekinut)")
+            continue
 
         izvuceno = _extract_json(odgovor.get("response", ""))
         pred_atk = pred_risk = None
@@ -356,6 +371,10 @@ def evaluiraj(model: str, test: list[dict], limit: int,
     metrike = sastavi_metrike(model, n, atk_ok, risk_ok, parsed,
                               latencije, per_class, confusion)
     metrike["dekodiranje"] = nacin
+    metrike["neuspjelih_poziva"] = neuspjeli
+    if neuspjeli:
+        print(f"\n   Prekinutih poziva: {neuspjeli} od {n} "
+              f"({neuspjeli / n * 100:.1f} %) — bilježe se kao neuspješni.")
     return metrike
 
 
