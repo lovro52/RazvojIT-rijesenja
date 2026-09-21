@@ -7,14 +7,14 @@
 > | Autor | Lovro Luka Matan (JMBAG: 0114035988, redoviti student) |
 > | Naslov rada | Analiza sigurnosnih prijetnji u mrežnim zapisima primjenom velikih jezičnih modela |
 > | Vrsta rada | Diplomski rad |
-> | Ustanova | Sveučilište Jurja Dobrile u Puli, Fakultet informatike u Puli |
+> | Ustanova | Sveučilište Jurja Dobrile u Puli, Fakultet informatike |
 > | Studijski smjer | Informatika |
 > | Kolegij | Razvoj IT rješenja |
 > | Znanstveno područje | Društvene znanosti |
 > | Znanstveno polje | Informacijske znanosti |
 > | Znanstvena grana | Informacijski sustavi i informatologija |
 > | Mentor | izv. prof. dr. sc. Nikola Tanković |
-> | Mjesto i datum | Pula, rujan 2026. |
+> | Mjesto i datum | Pula, rujan, 2026. godine |
 
 ---
 
